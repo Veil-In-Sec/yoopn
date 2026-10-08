@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+<<<<<<< HEAD
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
@@ -7,6 +8,16 @@ class AppTheme {
   AppTheme._();
 
   static const double radius = 26;
+=======
+
+import 'app_colors.dart';
+
+/// Light-only theme for YooPN (uses the default system font).
+class AppTheme {
+  AppTheme._();
+
+  static const double radius = 14;
+>>>>>>> 5a5552a99aee2e3f776e5e720b49ebac3b94f5ab
 
   static ThemeData get light {
     const colorScheme = ColorScheme.light(
@@ -44,7 +55,10 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+<<<<<<< HEAD
       fontFamily: GoogleFonts.inter().fontFamily,
+=======
+>>>>>>> 5a5552a99aee2e3f776e5e720b49ebac3b94f5ab
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
 
@@ -107,12 +121,21 @@ class AppTheme {
         fillColor: AppColors.surfaceVariant,
         hintStyle: const TextStyle(color: AppColors.textHint),
         contentPadding:
+<<<<<<< HEAD
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: inputBorder(AppColors.border),
         enabledBorder: inputBorder(AppColors.border),
         focusedBorder: inputBorder(AppColors.primaryLight, 1.2),
         errorBorder: inputBorder(AppColors.error),
         focusedErrorBorder: inputBorder(AppColors.error, 1.2),
+=======
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: inputBorder(AppColors.border),
+        enabledBorder: inputBorder(AppColors.border),
+        focusedBorder: inputBorder(AppColors.primary, 1.8),
+        errorBorder: inputBorder(AppColors.error),
+        focusedErrorBorder: inputBorder(AppColors.error, 1.8),
+>>>>>>> 5a5552a99aee2e3f776e5e720b49ebac3b94f5ab
       ),
 
       cardTheme: CardThemeData(

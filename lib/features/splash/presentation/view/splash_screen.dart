@@ -16,7 +16,11 @@ class SplashScreen extends StatelessWidget {
       listener: (context, state) {
         switch (state.status) {
           case SplashStatus.loaded:
+<<<<<<< HEAD
             context.pushReplacement(AppPages.auth);
+=======
+            context.pushReplacement(AppPages.home);
+>>>>>>> 5a5552a99aee2e3f776e5e720b49ebac3b94f5ab
             break;
 
           case SplashStatus.error:

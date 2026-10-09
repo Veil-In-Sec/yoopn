@@ -6,6 +6,7 @@ import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:yoopn/features/auth/presentation/widgets/password_field.dart';
 
 class PasswordScreen extends StatefulWidget {
   const PasswordScreen({super.key});
@@ -17,7 +18,6 @@ class PasswordScreen extends StatefulWidget {
 class _PasswordScreenState extends State<PasswordScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _passwordController = TextEditingController();
-  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -25,9 +25,21 @@ class _PasswordScreenState extends State<PasswordScreen> {
     super.dispose();
   }
 
+  void _submit() {
+    if (_formKey.currentState?.validate() ?? false) {
+      context.read<AuthBloc>().add(
+        AuthPasswordSubmitted(_passwordController.text),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.status != curr.status ||
+          prev.errorMsg != curr.errorMsg ||
+          prev.message != curr.message,
       listener: (context, state) {
         switch (state.status) {
           case AuthStatus.success:
@@ -58,7 +70,10 @@ class _PasswordScreenState extends State<PasswordScreen> {
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+            icon: const Icon(
+              Icons.arrow_back_ios_new,
+              color: AppColors.textPrimary,
+            ),
             onPressed: () => context.pop(),
           ),
           backgroundColor: Colors.transparent,
@@ -75,72 +90,34 @@ class _PasswordScreenState extends State<PasswordScreen> {
                   Text(
                     "Enter Password",
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                          fontSize: 26.sp,
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                      fontSize: 26.sp,
+                    ),
                   ),
                   Spacing.vertical(8),
-                  BlocBuilder<AuthBloc, AuthState>(
-                    builder: (context, state) {
+                  BlocSelector<AuthBloc, AuthState, String>(
+                    selector: (state) => state.email,
+                    builder: (context, email) {
                       return Text(
-                        "Entering password for ${state.email.isNotEmpty ? state.email : 'your email'}",
+                        "Entering password for ${email.isNotEmpty ? email : 'your email'}",
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.textSecondary,
-                              fontSize: 14.sp,
-                            ),
+                          color: AppColors.textSecondary,
+                          fontSize: 14.sp,
+                        ),
                       );
                     },
                   ),
                   Spacing.vertical(32),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter a password';
-                      }
-                      if (value.trim().length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(
-                      hintText: "Enter your password",
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
-                          color: AppColors.textSecondary,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
+                  PasswordField(controller: _passwordController),
                   Spacing.vertical(24),
-                  BlocBuilder<AuthBloc, AuthState>(
-                    builder: (context, state) {
-                      final isLoading = state.status == AuthStatus.loading;
+                  BlocSelector<AuthBloc, AuthState, bool>(
+                    selector: (state) => state.status == AuthStatus.loading,
+                    builder: (context, isLoading) {
                       return SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  if (_formKey.currentState?.validate() ??
-                                      false) {
-                                    context.read<AuthBloc>().add(
-                                          AuthPasswordSubmitted(
-                                            _passwordController.text,
-                                          ),
-                                        );
-                                  }
-                                },
+                          onPressed: isLoading ? null : _submit,
                           child: isLoading
                               ? SizedBox(
                                   height: 20.h,
@@ -152,9 +129,7 @@ class _PasswordScreenState extends State<PasswordScreen> {
                                 )
                               : Text(
                                   "Continue",
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyLarge!
+                                  style: Theme.of(context).textTheme.bodyLarge!
                                       .copyWith(
                                         fontWeight: FontWeight.w900,
                                         color: AppColors.onPrimary,

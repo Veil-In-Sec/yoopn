@@ -58,11 +58,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (event.session != null) {
       emit(state.copyWith(
         status: AuthStatus.success,
+        loadingAction: AuthLoadingAction.none,
         session: event.session,
       ));
     } else {
       emit(state.copyWith(
         status: AuthStatus.initial,
+        loadingAction: AuthLoadingAction.none,
         session: null,
       ));
     }
@@ -76,6 +78,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (validationError != null) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: validationError,
       ));
       return;
@@ -83,6 +86,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     emit(state.copyWith(
       status: AuthStatus.emailSubmitted,
+      loadingAction: AuthLoadingAction.none,
       errorMsg: null,
       message: null,
     ));
@@ -96,16 +100,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (password.length < 6) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: 'Password must be at least 6 characters',
       ));
       return;
     }
 
-    emit(state.copyWith(status: AuthStatus.loading, errorMsg: null, message: null));
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      loadingAction: AuthLoadingAction.password,
+      errorMsg: null,
+      message: null,
+    ));
 
     if (!await InternetUtils.isConnected()) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: 'Please connect to the internet!',
       ));
       return;
@@ -121,13 +132,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (response.session != null) {
         emit(state.copyWith(
           status: AuthStatus.success,
+          loadingAction: AuthLoadingAction.none,
           session: response.session,
         ));
         return;
       }
     } on supabase.AuthException catch (e) {
       final errorMsgLower = e.message.toLowerCase();
-      // If error indicates user not found or invalid login credentials, attempt sign up automatically
+      // If error indicates user not found or invalid credentials, attempt sign up automatically
       if (errorMsgLower.contains('invalid') ||
           errorMsgLower.contains('user not found') ||
           errorMsgLower.contains('credentials') ||
@@ -141,33 +153,41 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           if (signUpResponse.session != null) {
             emit(state.copyWith(
               status: AuthStatus.success,
+              loadingAction: AuthLoadingAction.none,
               session: signUpResponse.session,
             ));
             return;
           } else if (signUpResponse.user != null) {
             emit(state.copyWith(
               status: AuthStatus.otpSent,
-              message: 'Account created! Please check your email to confirm registration if required.',
+              loadingAction: AuthLoadingAction.none,
+              message:
+                  'Account created! Please check your email to confirm registration if required.',
             ));
             return;
           }
         } on supabase.AuthException catch (signUpError) {
-          if (signUpError.message.toLowerCase().contains('already registered') ||
+          if (signUpError.message
+                  .toLowerCase()
+                  .contains('already registered') ||
               signUpError.message.toLowerCase().contains('already exists')) {
             emit(state.copyWith(
               status: AuthStatus.failure,
+              loadingAction: AuthLoadingAction.none,
               errorMsg: 'Incorrect password for this existing account.',
             ));
             return;
           }
           emit(state.copyWith(
             status: AuthStatus.failure,
+            loadingAction: AuthLoadingAction.none,
             errorMsg: signUpError.message,
           ));
           return;
         } catch (signUpError) {
           emit(state.copyWith(
             status: AuthStatus.failure,
+            loadingAction: AuthLoadingAction.none,
             errorMsg: signUpError.toString(),
           ));
           return;
@@ -176,12 +196,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: e.message,
       ));
       return;
     } catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: e.toString(),
       ));
       return;
@@ -195,16 +217,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (event.otp.trim().isEmpty) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: 'Please enter the verification code',
       ));
       return;
     }
 
-    emit(state.copyWith(status: AuthStatus.loading, errorMsg: null, message: null));
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      loadingAction: AuthLoadingAction.otp,
+      errorMsg: null,
+      message: null,
+    ));
 
     if (!await InternetUtils.isConnected()) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: 'Please connect to the internet!',
       ));
       return;
@@ -219,22 +248,27 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (response.session != null) {
         emit(state.copyWith(
           status: AuthStatus.success,
+          loadingAction: AuthLoadingAction.none,
           session: response.session,
         ));
       } else {
         emit(state.copyWith(
           status: AuthStatus.failure,
-          errorMsg: 'Verification failed. Please check the code and try again.',
+          loadingAction: AuthLoadingAction.none,
+          errorMsg:
+              'Verification failed. Please check the code and try again.',
         ));
       }
     } on supabase.AuthException catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: e.message,
       ));
     } catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: e.toString(),
       ));
     }
@@ -244,11 +278,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthGoogleSubmitted event,
     Emitter<AuthState> emit,
   ) async {
-    emit(state.copyWith(status: AuthStatus.loading, errorMsg: null, message: null));
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      loadingAction: AuthLoadingAction.google,
+      errorMsg: null,
+      message: null,
+    ));
 
     if (!await InternetUtils.isConnected()) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: 'Please connect to the internet!',
       ));
       return;
@@ -263,17 +303,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (!launched) {
         emit(state.copyWith(
           status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
           errorMsg: 'Failed to open browser for Google authentication.',
         ));
       }
     } on supabase.AuthException catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: e.message,
       ));
     } catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: e.toString(),
       ));
     }
@@ -283,13 +326,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthSignOutSubmitted event,
     Emitter<AuthState> emit,
   ) async {
-    emit(state.copyWith(status: AuthStatus.loading));
+    emit(state.copyWith(
+      status: AuthStatus.loading,
+      loadingAction: AuthLoadingAction.none,
+    ));
     try {
       await _supabaseClient.auth.signOut();
-      emit(const AuthState(status: AuthStatus.initial));
+      emit(const AuthState(
+        status: AuthStatus.initial,
+        loadingAction: AuthLoadingAction.none,
+      ));
     } catch (e) {
       emit(state.copyWith(
         status: AuthStatus.failure,
+        loadingAction: AuthLoadingAction.none,
         errorMsg: e.toString(),
       ));
     }

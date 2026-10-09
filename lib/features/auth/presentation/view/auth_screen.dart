@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -20,27 +21,50 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  static const Duration _autoPlayInterval = Duration(seconds: 3);
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final PageController _pageController = PageController();
-  int _currentPage = 0;
+  final ValueNotifier<int> _currentPage = ValueNotifier<int>(0);
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    startAutoPlay(_pageController, _currentPage);
+    startAutoPlay(_timer, _autoPlayInterval, _pageController, _currentPage);
+
+    // Check if already authenticated via background OAuth deep link
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final authBlocState = context.read<AuthBloc>().state;
+        if (authBlocState.status == AuthStatus.success &&
+            authBlocState.session != null) {
+          context.pushReplacement(AppPages.home);
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     _pageController.dispose();
+    _currentPage.dispose();
     super.dispose();
+  }
+
+  void _submitEmail() {
+    if (_formKey.currentState?.validate() ?? false) {
+      context.read<AuthBloc>().add(const AuthEmailSubmitted());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.status != curr.status ||
+          prev.errorMsg != curr.errorMsg ||
+          prev.message != curr.message,
       listener: (context, state) {
         switch (state.status) {
           case AuthStatus.success:
@@ -52,8 +76,9 @@ class _AuthScreenState extends State<AuthScreen> {
           case AuthStatus.otpSent:
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content:
-                    Text(state.message ?? 'Verification code sent to email'),
+                content: Text(
+                  state.message ?? 'Verification code sent to email',
+                ),
                 backgroundColor: AppColors.primary,
               ),
             );
@@ -85,31 +110,28 @@ class _AuthScreenState extends State<AuthScreen> {
                     height: 360.h,
                     child: PageView.builder(
                       controller: _pageController,
-                      onPageChanged: (index) {
-                        setState(() {
-                          _currentPage = index;
-                        });
-                      },
+                      onPageChanged: (index) => _currentPage.value = index,
                       itemCount: pages.length,
                       itemBuilder: (context, index) {
                         final pageData = pages[index];
                         return AnimatedBuilder(
                           animation: _pageController,
                           builder: (context, child) {
-                            double opacity = 1.0;
+                            double opacity;
                             if (_pageController.position.haveDimensions) {
-                              final page = _pageController.page ??
-                                  _currentPage.toDouble();
-                              opacity =
-                                  (1.0 - (index - page).abs()).clamp(0.0, 1.0);
+                              final page =
+                                  _pageController.page ??
+                                  _pageController.initialPage.toDouble();
+                              opacity = (1.0 - (index - page).abs()).clamp(
+                                0.0,
+                                1.0,
+                              );
                             } else {
-                              opacity = index == _currentPage ? 1.0 : 0.0;
+                              opacity = index == _pageController.initialPage
+                                  ? 1.0
+                                  : 0.0;
                             }
-
-                            return Opacity(
-                              opacity: opacity,
-                              child: child,
-                            );
+                            return Opacity(opacity: opacity, child: child);
                           },
                           child: AuthPageView(
                             lottiePath: pageData.lottiePath,
@@ -121,33 +143,14 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                   Spacing.vertical(10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      pages.length,
-                      (index) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                        height: 8.h,
-                        width: _currentPage == index ? 24.w : 8.w,
-                        decoration: BoxDecoration(
-                          color: _currentPage == index
-                              ? AppColors.primary
-                              : AppColors.border,
-                          borderRadius: BorderRadius.circular(4.r),
-                        ),
-                      ),
-                    ),
-                  ),
                   Spacing.vertical(20),
                   RPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: TextFormField(
                       keyboardType: TextInputType.emailAddress,
                       validator: AppValidators.validateEmail,
-                      onChanged: (value) => context
-                          .read<AuthBloc>()
-                          .add(AuthEmailChanged(value)),
+                      onChanged: (value) =>
+                          context.read<AuthBloc>().add(AuthEmailChanged(value)),
                       decoration: const InputDecoration(
                         hintText: "Enter your email address",
                       ),
@@ -156,21 +159,15 @@ class _AuthScreenState extends State<AuthScreen> {
                   Spacing.vertical(15),
                   BlocBuilder<AuthBloc, AuthState>(
                     builder: (context, state) {
-                      final isLoading = state.status == AuthStatus.loading;
+                      final isAnyLoading = state.status == AuthStatus.loading;
+                      final isEmailLoading = isAnyLoading &&
+                          state.loadingAction == AuthLoadingAction.email;
+              
                       return RPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: ElevatedButton(
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  if (_formKey.currentState?.validate() ??
-                                      false) {
-                                    context
-                                        .read<AuthBloc>()
-                                        .add(const AuthEmailSubmitted());
-                                  }
-                                },
-                          child: isLoading
+                          onPressed: isAnyLoading ? null : _submitEmail,
+                          child: isEmailLoading
                               ? SizedBox(
                                   height: 20.h,
                                   width: 20.w,
@@ -202,16 +199,19 @@ class _AuthScreenState extends State<AuthScreen> {
                   Spacing.vertical(15),
                   BlocBuilder<AuthBloc, AuthState>(
                     builder: (context, state) {
-                      final isLoading = state.status == AuthStatus.loading;
+                      final isAnyLoading = state.status == AuthStatus.loading;
+                      final isGoogleLoading = isAnyLoading &&
+                          state.loadingAction == AuthLoadingAction.google;
+              
                       return RPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: OutlinedButton(
-                          onPressed: isLoading
+                          onPressed: isAnyLoading
                               ? null
-                              : () => context
-                                  .read<AuthBloc>()
-                                  .add(const AuthGoogleSubmitted()),
-                          child: isLoading
+                              : () => context.read<AuthBloc>().add(
+                                    const AuthGoogleSubmitted(),
+                                  ),
+                          child: isGoogleLoading
                               ? SizedBox(
                                   height: 20.h,
                                   width: 20.w,

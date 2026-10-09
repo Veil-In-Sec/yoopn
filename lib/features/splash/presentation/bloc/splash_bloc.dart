@@ -1,7 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:yoopn/core/utils/internet_connections.dart';
 
 part 'splash_event.dart';
 part 'splash_state.dart';
@@ -26,26 +25,15 @@ class SplashBloc extends Bloc<SplashEvent, SplashState> {
     // Check if user session is present in Supabase
     Session? session = _supabaseClient.auth.currentSession;
 
-    // If session is still null, wait briefly for local storage session restoration
     if (session == null) {
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 600));
       session = _supabaseClient.auth.currentSession;
     }
 
     if (session != null) {
       emit(state.copyWith(status: SplashStatus.authenticated));
-      return;
+    } else {
+      emit(state.copyWith(status: SplashStatus.unauthenticated));
     }
-
-    final isConnected = await InternetUtils.isConnected();
-    if (!isConnected) {
-      emit(state.copyWith(
-        status: SplashStatus.error,
-        errorMsg: "Please connect to the internet!",
-      ));
-      return;
-    }
-
-    emit(state.copyWith(status: SplashStatus.unauthenticated));
   }
 }

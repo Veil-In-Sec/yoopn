@@ -10,4 +10,5 @@ class AppAssets {
   static const String securityAnime = "$lottieAssets/Security.json";
   static const String vpnAnime = "$lottieAssets/vpn.json";
   static const String speedAnime = "$lottieAssets/speed.json";
+  static const String passwordAnime = "$lottieAssets/password.json";
 }

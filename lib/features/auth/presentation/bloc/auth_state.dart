@@ -11,6 +11,7 @@ final class AuthState extends Equatable {
   final String? message;
   final String email;
   final supabase.Session? session;
+  final AuthUserEntity? user;
 
   const AuthState({
     this.status = AuthStatus.initial,
@@ -19,6 +20,7 @@ final class AuthState extends Equatable {
     this.message,
     this.email = '',
     this.session,
+    this.user,
   });
 
   AuthState copyWith({
@@ -28,6 +30,7 @@ final class AuthState extends Equatable {
     String? message,
     String? email,
     supabase.Session? session,
+    AuthUserEntity? user,
   }) {
     return AuthState(
       status: status ?? this.status,
@@ -36,10 +39,11 @@ final class AuthState extends Equatable {
       message: message,
       email: email ?? this.email,
       session: session ?? this.session,
+      user: user ?? this.user,
     );
   }
 
   @override
   List<Object?> get props =>
-      [status, loadingAction, errorMsg, message, email, session];
+      [status, loadingAction, errorMsg, message, email, session, user];
 }

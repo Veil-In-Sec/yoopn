@@ -10,19 +10,20 @@ void main(List<String> args) async {
   await _init();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp])
       .then((_) {
-    return runApp(
-      const ScreenUtilInit(
-        designSize: Size(375, 812),
-        minTextAdapt: true,
-        splitScreenMode: false,
-        child: YooPNApp(),
-      ),
-    );
-  });
+        return runApp(
+          const ScreenUtilInit(
+            designSize: Size(375, 812),
+            minTextAdapt: true,
+            splitScreenMode: false,
+            child: YooPNApp(),
+          ),
+        );
+      });
 }
 
 Future<void> _init() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SupabaseConfig.load();
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
@@ -32,7 +33,8 @@ Future<void> _init() async {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
     ),
   );
 }

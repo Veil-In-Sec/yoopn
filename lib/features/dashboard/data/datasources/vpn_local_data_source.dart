@@ -1,6 +1,7 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:yoopn/core/errors/vpn_failures.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/data/models/vpn_server_model.dart';
 import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 
@@ -97,7 +98,11 @@ CREATE TABLE $tableMeta (
 
   @override
   Future<void> cacheServers(List<Map<String, dynamic>> json) async {
-    if (json.isEmpty) return;
+    if (json.isEmpty) {
+      AppLogger.w('CACHE', 'cacheServers skip — empty json');
+      return;
+    }
+    AppLogger.i('CACHE', 'cacheServers ${json.length} rows → sqflite…');
     try {
       final db = await _open();
       final now = DateTime.now().toIso8601String();
@@ -135,7 +140,9 @@ CREATE TABLE $tableMeta (
         'fetched_at': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       await batch.commit(noResult: true);
-    } catch (e) {
+      AppLogger.i('CACHE', 'cacheServers done (${json.length} rows)');
+    } catch (e, st) {
+      AppLogger.e('CACHE', 'cacheServers failed', e, st);
       throw VpnException('cache-write', 'Could not save servers offline.', e);
     }
   }
@@ -170,8 +177,10 @@ CREATE TABLE $tableMeta (
         orderBy: 'score DESC, ping ASC',
         limit: limit,
       );
+      AppLogger.d('CACHE', 'loadCachedJson query="$query" → ${rows.length} rows');
       return rows.map((r) => Map<String, dynamic>.from(r)).toList();
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.e('CACHE', 'loadCachedJson failed', e, st);
       throw VpnException('cache-read', 'Could not load saved servers.', e);
     }
   }
@@ -194,10 +203,14 @@ CREATE TABLE $tableMeta (
               limit: 1,
             )
           : rows;
-      if (rows.isEmpty) return null;
+      if (rows.isEmpty) {
+        AppLogger.d('CACHE', 'loadBestServer → none cached');
+        return null;
+      }
       final servers = VpnServerModel.serversFromJson(
         rows.map((r) => Map<String, dynamic>.from(r)).toList(),
       );
+      AppLogger.d('CACHE', 'loadBestServer → ${servers.isEmpty ? 'none' : servers.first.id}');
       return servers.isEmpty ? null : servers.first;
     } catch (_) {
       return null;

@@ -41,6 +41,9 @@ class _FakeVpnRepository implements VpnRepository {
         .where((s) => s.name.toLowerCase().contains(q))
         .toList();
   }
+
+  @override
+  Stream<String> get connectionDetailStream => const Stream.empty();
 }
 
 void main() {

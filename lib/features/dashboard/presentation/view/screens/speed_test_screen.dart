@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/core/utils/dependency_injection.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/speed_test_cubit.dart';
 
@@ -11,8 +12,12 @@ class SpeedTestScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppLogger.d('UI', 'SpeedTestScreen build → create SpeedTestCubit');
     return BlocProvider(
-      create: (_) => sl<SpeedTestCubit>(),
+      create: (_) {
+        AppLogger.d('SPEED', 'SpeedTestCubit created for screen');
+        return sl<SpeedTestCubit>();
+      },
       child: const _SpeedTestBody(),
     );
   }
@@ -142,7 +147,10 @@ class _SpeedTestBody extends StatelessWidget {
                   builder: (context, running) => ElevatedButton.icon(
                     onPressed: running
                         ? null
-                        : () => context.read<SpeedTestCubit>().run(),
+                        : () {
+                            AppLogger.i('UI', 'SpeedTest Run tapped');
+                            context.read<SpeedTestCubit>().run();
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.onPrimary,

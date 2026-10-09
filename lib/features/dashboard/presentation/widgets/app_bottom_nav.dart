@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({super.key, required this.index});
@@ -44,6 +45,7 @@ class AppBottomNav extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
                         if (selected == i) return;
+                        AppLogger.i('UI', 'bottomNav $selected → $i (${_items[i].$2})');
                         HapticFeedback.selectionClick();
                         index.value = i;
                       },

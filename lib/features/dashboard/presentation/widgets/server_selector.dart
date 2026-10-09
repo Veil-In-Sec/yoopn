@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
@@ -23,92 +24,87 @@ class ServerSelector extends StatelessWidget {
       builder: (context, state) {
         final selected = _selectedServer(state);
 
-        return Material(
-          color: AppColors.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.r),
-            side: const BorderSide(color: AppColors.border),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20.r),
-            onTap: () {
-              if (bloc.state.status != VpnStatus.disconnected) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Disconnect first to change server'),
-                  ),
-                );
-                return;
-              }
-              _openServerSheet(context, bloc);
-            },
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
-              child: Row(
-                children: [
-                  Text(
-                    selected.flag,
-                    style: TextStyle(fontSize: 26.sp),
-                  ),
-                  SizedBox(width: 14.w),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              'Server location',
-                              style: TextStyle(
-                                fontSize: 11.sp,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            if (state.isLoadingServers) ...[
-                              SizedBox(width: 8.w),
-                              SizedBox(
-                                width: 12.w,
-                                height: 12.w,
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ],
-                          ],
+        return Center(
+          child: Material(
+            color: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32.r),
+              side: const BorderSide(color: AppColors.border),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(32.r),
+              onTap: () {
+                AppLogger.i('UI', 'ServerSelector pill tapped');
+                if (bloc.state.status != VpnStatus.disconnected) {
+                  AppLogger.w('UI', 'server change blocked — not disconnected');
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      const SnackBar(
+                        content: Text('Disconnect first to change server'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  return;
+                }
+                _openServerSheet(context, bloc);
+              },
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 11.h),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (state.isLoadingServers)
+                      SizedBox(
+                        width: 18.w,
+                        height: 18.w,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
                         ),
-                        Text(
-                          selected.name,
-                          style: TextStyle(
-                            fontSize: 15.sp,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        if (selected.isVpnGate)
+                      )
+                    else
+                      Text(selected.flag, style: TextStyle(fontSize: 22.sp)),
+                    SizedBox(width: 10.w),
+                    // Fixed-width label column: the pill must not resize when
+                    // switching between a relay name and a placeholder.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: 190.w),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(
-                            '${selected.hostName} • ${selected.speedText}',
+                            'Location',
                             style: TextStyle(
-                              fontSize: 11.sp,
-                              color: AppColors.textSecondary,
-                            ),
-                          )
-                        else if (state.serversStatus ==
-                            VpnServersStatus.failure)
-                          Text(
-                            'Offline list — tap to retry',
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              color: AppColors.warning,
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textHint,
                             ),
                           ),
-                      ],
+                          Text(
+                            selected.name.isEmpty ? 'Select' : selected.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w700,
+                              color: selected.isVpnGate
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const Icon(
-                    Icons.keyboard_arrow_up_rounded,
-                    color: AppColors.textSecondary,
-                  ),
-                ],
+                    SizedBox(width: 6.w),
+                    const Icon(
+                      Icons.expand_more_rounded,
+                      size: 20,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -124,12 +120,13 @@ class ServerSelector extends StatelessWidget {
     for (final s in VpnServer.availableServers) {
       if (s.matchesId(state.server)) return s;
     }
-    return state.servers.isNotEmpty
-        ? state.servers.first
-        : const VpnServer(name: 'United States', flag: '🇺🇸');
+    return state.servers.isEmpty
+        ? const VpnServer(name: '', flag: '🌐')
+        : state.servers.first;
   }
 
   void _openServerSheet(BuildContext context, VpnBloc bloc) {
+    AppLogger.d('UI', 'open server sheet (${bloc.state.servers.length} servers)');
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
@@ -208,9 +205,12 @@ class _ServerListSheetState extends State<_ServerListSheet> {
                 ),
                 IconButton(
                   tooltip: 'Refresh VPNGate list',
-                  onPressed: () => bloc.add(
-                    const VpnServersRequested(forceRefresh: true),
-                  ),
+                  onPressed: () {
+                    AppLogger.i('UI', 'server list manual refresh');
+                    bloc.add(
+                      const VpnServersRequested(forceRefresh: true),
+                    );
+                  },
                   icon: BlocSelector<VpnBloc, VpnState, bool>(
                     selector: (s) => s.isLoadingServers,
                     builder: (_, loading) => loading
@@ -314,6 +314,7 @@ class _ServerListSheetState extends State<_ServerListSheet> {
                             )
                           : null,
                       onTap: () {
+                        AppLogger.i('UI', 'server picked ${e.id} (${e.name} ${e.ip})');
                         Navigator.of(context).pop();
                         bloc.add(VpnServerSelected(e.id));
                       },

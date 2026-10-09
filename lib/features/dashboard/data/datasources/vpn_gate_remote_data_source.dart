@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import '../../domain/entities/vpn_server.dart';
 import '../models/vpn_server_model.dart';
 
@@ -59,10 +60,16 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
   Future<List<Map<String, dynamic>>> fetchJson({
     bool forceRefresh = false,
   }) async {
-    if (!forceRefresh && _cacheValid) return _jsonCache!;
+    AppLogger.d('GATE', 'fetchJson forceRefresh=$forceRefresh cacheValid=$_cacheValid cached=${_jsonCache?.length ?? 0}');
+    if (!forceRefresh && _cacheValid) {
+      AppLogger.d('GATE', 'fetchJson → memory cache (${_jsonCache!.length} rows)');
+      return _jsonCache!;
+    }
     final csv = await _fetchRawCsv();
+    AppLogger.i('GATE', 'CSV downloaded ${csv.length} chars → parsing…');
     // Stage 1: CSV -> JSON.
     final json = VpnServerModel.csvToJson(csv);
+    AppLogger.i('GATE', 'CSV→JSON ${json.length} rows');
     if (json.isEmpty) {
       throw const FormatException('No VPN servers in VPNGate response');
     }
@@ -74,13 +81,19 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
     _jsonCache = json;
     _serverCache = servers;
     _fetchedAt = DateTime.now();
+    AppLogger.i('GATE', 'cached ${servers.length} servers at $_fetchedAt');
     return json;
   }
 
   @override
   Future<List<VpnServer>> fetchServers({bool forceRefresh = false}) async {
-    if (!forceRefresh && _cacheValid) return _serverCache!;
+    AppLogger.d('GATE', 'fetchServers forceRefresh=$forceRefresh');
+    if (!forceRefresh && _cacheValid) {
+      AppLogger.d('GATE', 'fetchServers → memory cache (${_serverCache!.length})');
+      return _serverCache!;
+    }
     await fetchJson(forceRefresh: forceRefresh);
+    AppLogger.i('GATE', 'fetchServers → ${_serverCache!.length} servers');
     return _serverCache!;
   }
 
@@ -99,6 +112,7 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
       } on FormatException {
         rethrow;
       } on DioException catch (e) {
+        AppLogger.w('GATE', 'attempt ${attempt + 1}/3 failed: ${e.message}');
         lastError = e;
         final detail =
             e.message ?? e.error?.toString() ?? 'Failed to reach VPNGate';

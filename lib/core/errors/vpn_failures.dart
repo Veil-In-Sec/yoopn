@@ -1,3 +1,5 @@
+import 'package:yoopn/core/utils/app_logger.dart';
+
 /// Typed failures for the dashboard feature.
 ///
 /// The data layer throws [VpnException]; the repository maps it to a
@@ -39,6 +41,12 @@ class VpnFailure {
 
   /// Map any thrown error to a displayable failure.
   factory VpnFailure.from(Object error) {
+    final mapped = _map(error);
+    AppLogger.w('VPN', 'failure mapped ${error.runtimeType} → ${mapped.code}: ${mapped.message}');
+    return mapped;
+  }
+
+  static VpnFailure _map(Object error) {
     if (error is VpnFailure) return error;
     if (error is VpnException) return VpnFailure(error.code, error.message);
     final text = error.toString();

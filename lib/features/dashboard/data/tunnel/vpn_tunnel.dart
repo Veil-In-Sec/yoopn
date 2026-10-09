@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:yoopn/core/errors/vpn_failures.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_data_source.dart';
 import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 
@@ -9,14 +10,22 @@ enum VpnTunnelStatus { disconnected, connecting, connected, error }
 
 /// Swappable VPN tunnel.
 ///
-/// [SimulatedVpnTunnel] runs everywhere (desktop/test) with the previous
-/// 1800ms fake handshake. The native OpenVPN implementation drops in here:
-/// implement [VpnTunnel] with the flutter OpenVPN plugin and register it in
-/// `dependency_injection.dart` for Android/iOS — no bloc/UI changes needed.
+/// - Mobile (Android/iOS): [OpenVpnTunnel] (real OpenVPN via `openvpn_flutter`,
+///   VPNGate `vpn`/`vpn` credentials). Registered in DI.
+/// - Desktop/web/tests: [SimulatedVpnTunnel] (1800ms fake handshake).
+/// Bloc/UI talk only to [VpnTunnel] so the swap is invisible to them.
 abstract interface class VpnTunnel {
   Stream<VpnTunnelStatus> get statusStream;
 
   VpnTunnelStatus get currentStatus;
+
+  /// Human-readable sub-stage of an in-progress connection
+  /// (e.g. `Authenticating…`). Empty string when idle.
+  /// Backs the "Connecting…" detail line so the UI never looks frozen.
+  String get lastStageText;
+
+  /// Emits [lastStageText] whenever the engine reports progress.
+  Stream<String> get stageTextStream;
 
   Future<void> connect(VpnServer server);
 
@@ -31,7 +40,9 @@ class SimulatedVpnTunnel implements VpnTunnel {
   final Duration connectionDelay;
 
   final _controller = StreamController<VpnTunnelStatus>.broadcast();
+  final _stageController = StreamController<String>.broadcast();
   VpnTunnelStatus _status = VpnTunnelStatus.disconnected;
+  String _stageText = '';
 
   @override
   Stream<VpnTunnelStatus> get statusStream => _controller.stream;
@@ -40,24 +51,50 @@ class SimulatedVpnTunnel implements VpnTunnel {
   VpnTunnelStatus get currentStatus => _status;
 
   @override
+  String get lastStageText => _stageText;
+
+  @override
+  Stream<String> get stageTextStream => _stageController.stream;
+
+  void _stage(String text) {
+    _stageText = text;
+    AppLogger.d('TUNNEL', 'stage: $text');
+    if (!_stageController.isClosed) _stageController.add(text);
+  }
+
+  @override
   Future<void> connect(VpnServer server) async {
+    AppLogger.i('TUNNEL', 'connect → ${server.id} (${server.ip}) cfgLen=${server.openVpnConfig.length}');
     if (server.isVpnGate && server.decodedOpenVpnConfig.isEmpty) {
+      AppLogger.w('TUNNEL', 'bad OpenVPN config for ${server.id}');
       throw const VpnException(
         'bad-config',
         'This relay has an unreadable OpenVPN config. Pick another server.',
       );
     }
     _emit(VpnTunnelStatus.connecting);
-    await Future<void>.delayed(connectionDelay);
+    _stage('Preparing…');
+    AppLogger.d('TUNNEL', 'handshake… delay=${connectionDelay.inMilliseconds}ms');
+    final half = Duration(
+      milliseconds: connectionDelay.inMilliseconds ~/ 2,
+    );
+    await Future<void>.delayed(half);
+    if (_status == VpnTunnelStatus.connecting) _stage('Securing tunnel…');
+    await Future<void>.delayed(half);
     _emit(VpnTunnelStatus.connected);
+    _stage('Connected');
+    AppLogger.i('TUNNEL', 'connected ${server.id}');
   }
 
   @override
   Future<void> disconnect() async {
+    AppLogger.i('TUNNEL', 'disconnect (was $_status)');
+    _stage('');
     _emit(VpnTunnelStatus.disconnected);
   }
 
   void _emit(VpnTunnelStatus status) {
+    AppLogger.d('TUNNEL', 'status $_status → $status');
     _status = status;
     if (!_controller.isClosed) _controller.add(status);
   }
@@ -77,6 +114,12 @@ class TunnelVpnDataSource implements VpnDataSource {
 
   @override
   Future<void> disconnect() => tunnel.disconnect();
+
+  @override
+  String get lastStageText => tunnel.lastStageText;
+
+  @override
+  Stream<String> get stageTextStream => tunnel.stageTextStream;
 
   @override
   VpnServer? findServer(String name) {

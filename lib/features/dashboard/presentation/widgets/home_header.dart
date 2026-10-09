@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 
+/// Compact identity row. 1.1.1.1 keeps the account entry small so the power
+/// button stays the hero.
 class HomeHeader extends StatelessWidget {
   const HomeHeader({super.key, required this.email});
 
@@ -9,9 +11,8 @@ class HomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parts = email
-        .split('@')
-        .first
+    final local = email.split('@').first;
+    final parts = local
         .split(RegExp(r'[^a-zA-Z0-9]+'))
         .where((p) => p.isNotEmpty)
         .toList();
@@ -19,8 +20,6 @@ class HomeHeader extends StatelessWidget {
     final initials = parts.isEmpty
         ? 'U'
         : parts.take(2).map((p) => p[0]).join().toUpperCase();
-
-    // "john.doe@mail.com" -> "John"
     final name = parts.isEmpty
         ? 'there'
         : parts.first[0].toUpperCase() + parts.first.substring(1);
@@ -28,27 +27,29 @@ class HomeHeader extends StatelessWidget {
     return Row(
       children: [
         CircleAvatar(
-          radius: 22.r,
-          backgroundColor: AppColors.primary,
+          radius: 18.r,
+          backgroundColor: AppColors.primaryContainer,
           child: Text(
             initials,
             style: TextStyle(
-              fontSize: 14.sp,
+              fontSize: 13.sp,
               fontWeight: FontWeight.w800,
-              color: AppColors.onPrimary,
+              color: AppColors.primary,
             ),
           ),
         ),
-        SizedBox(width: 12.w),
+        SizedBox(width: 10.w),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Welcome back',
+                'YooPN',
                 style: TextStyle(
-                  fontSize: 12.sp,
-                  color: AppColors.textSecondary,
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
                 ),
               ),
               Text(
@@ -56,20 +57,21 @@ class HomeHeader extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  fontSize: 12.sp,
+                  color: AppColors.textSecondary,
                 ),
               ),
             ],
           ),
         ),
         IconButton(
-          tooltip: 'Need help?',
+          tooltip: 'Help',
           onPressed: () {},
+          visualDensity: VisualDensity.compact,
           icon: const Icon(
             Icons.help_outline_rounded,
-            color: AppColors.textPrimary,
+            size: 20,
+            color: AppColors.textSecondary,
           ),
         ),
       ],

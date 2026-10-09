@@ -1,3 +1,4 @@
+import 'package:yoopn/core/utils/app_logger.dart';
 import '../repositories/vpn_repository.dart';
 
 class DisconnectVpnUseCase {
@@ -5,5 +6,8 @@ class DisconnectVpnUseCase {
 
   final VpnRepository _repository;
 
-  Future<void> call() => _repository.disconnect();
+  Future<void> call() {
+    AppLogger.i('VPN', 'usecase.disconnect');
+    return _repository.disconnect();
+  }
 }

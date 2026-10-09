@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:yoopn/core/errors/vpn_failures.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 
 /// Result of one live speed-test run.
 class SpeedTestResult {
@@ -55,13 +56,19 @@ class LiveSpeedTestDataSource implements SpeedTestDataSource {
   Future<SpeedTestResult> run({
     void Function(double progress, String phase)? onProgress,
   }) async {
+    AppLogger.i('SPEED', 'run start');
     try {
       onProgress?.call(0.05, 'Pinging…');
       final pingMs = await _measurePing();
+      AppLogger.i('SPEED', 'ping=${pingMs}ms');
       onProgress?.call(0.2, 'Measuring download…');
+      AppLogger.d('SPEED', 'download start (10MB cloudflare)…');
       final downloadMbps = await _measureDownload(onProgress);
+      AppLogger.i('SPEED', 'download=${downloadMbps.toStringAsFixed(2)} Mbps');
       onProgress?.call(0.8, 'Measuring upload…');
+      AppLogger.d('SPEED', 'upload start (2MB)…');
       final uploadMbps = await _measureUpload(onProgress);
+      AppLogger.i('SPEED', 'upload=${uploadMbps.toStringAsFixed(2)} Mbps');
       onProgress?.call(1, 'Done');
       return SpeedTestResult(
         downloadMbps: downloadMbps,
@@ -70,8 +77,10 @@ class LiveSpeedTestDataSource implements SpeedTestDataSource {
         testedAt: DateTime.now(),
       );
     } on VpnException {
+      AppLogger.w('SPEED', 'run VpnException (rethrow)');
       rethrow;
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.e('SPEED', 'run failed', e, st);
       throw VpnException('speed-test', 'Speed test failed: $e', e);
     }
   }

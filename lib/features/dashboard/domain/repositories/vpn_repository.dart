@@ -16,4 +16,8 @@ abstract interface class VpnRepository {
 
   /// Offline-capable search over cached relays.
   Future<List<VpnServer>> searchServers(String query);
+
+  /// Live engine sub-stage texts while connecting ('' when idle).
+  /// The bloc forwards these to the UI detail line.
+  Stream<String> get connectionDetailStream;
 }

@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/dimentions/spacings.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/core/utils/app_validators.dart';
@@ -30,6 +31,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
+    AppLogger.d('UI', 'AuthScreen initState');
     startAutoPlay(_timer, _autoPlayInterval, _pageController, _currentPage);
 
     // Check if already authenticated via background OAuth deep link
@@ -53,8 +55,11 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _submitEmail() {
+    AppLogger.i('UI', 'AuthScreen Continue-with-Email tapped');
     if (_formKey.currentState?.validate() ?? false) {
       context.read<AuthBloc>().add(const AuthEmailSubmitted());
+    } else {
+      AppLogger.w('UI', 'AuthScreen email form invalid');
     }
   }
 
@@ -66,11 +71,14 @@ class _AuthScreenState extends State<AuthScreen> {
           prev.errorMsg != curr.errorMsg ||
           prev.message != curr.message,
       listener: (context, state) {
+        AppLogger.i('UI', 'AuthScreen listener status=${state.status} err=${state.errorMsg} msg=${state.message}');
         switch (state.status) {
           case AuthStatus.success:
+            AppLogger.i('ROUTE', 'auth → home');
             context.pushReplacement(AppPages.home);
             break;
           case AuthStatus.emailSubmitted:
+            AppLogger.i('ROUTE', 'auth → password for ${AppLogger.maskEmail(state.email)}');
             context.push(AppPages.password);
             break;
           case AuthStatus.otpSent:
@@ -208,9 +216,15 @@ class _AuthScreenState extends State<AuthScreen> {
                         child: OutlinedButton(
                           onPressed: isAnyLoading
                               ? null
-                              : () => context.read<AuthBloc>().add(
+                              : () {
+                                  AppLogger.i(
+                                    'UI',
+                                    'AuthScreen Continue-with-Google tapped',
+                                  );
+                                  context.read<AuthBloc>().add(
                                     const AuthGoogleSubmitted(),
-                                  ),
+                                  );
+                                },
                           child: isGoogleLoading
                               ? SizedBox(
                                   height: 20.h,

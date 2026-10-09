@@ -1,3 +1,7 @@
+// Inside `android { }` the identifier `java` resolves to the Java
+// plugin extension, shadowing the `java` package. Import the class directly.
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -29,11 +33,46 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Release signing is opt-in: create android/key.properties with
+        // storeFile/storePassword/keyAlias/keyPassword, then it is used
+        // automatically. Without that file the release build still falls
+        // back to debug keys so local `flutter build apk --release` works.
+        // Store the file and the keystore OUTSIDE version control.
+        create("release") {
+            val f = rootProject.file("key.properties")
+            if (f.exists()) {
+                val props = Properties()
+                f.inputStream().use { props.load(it) }
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (rootProject.file("key.properties").exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "YooPN: android/key.properties not found — signing release " +
+                        "with DEBUG keys. Do not publish this build."
+                )
+                signingConfigs.getByName("debug")
+            }
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+    }
+
+    // Required by openvpn_flutter (ics-openvpn .so): keep JNI libs unpacked
+    // or the tunnel fails to start on app-bundle builds.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }

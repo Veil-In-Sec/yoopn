@@ -1,6 +1,8 @@
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
+import 'package:yoopn/core/telemetry/telemetry_navigator_observer.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/auth/presentation/view/auth_screen.dart';
 import 'package:yoopn/features/auth/presentation/view/password_screen.dart';
 import 'package:yoopn/features/dashboard/presentation/view/dashboard_screen.dart';
@@ -18,8 +20,10 @@ Session? _currentSession() {
 
 final GoRouter appRouter = GoRouter(
   initialLocation: AppPages.splash,
+  observers: [TelemetryNavigatorObserver()],
   redirect: (context, state) {
     final location = state.matchedLocation;
+    AppLogger.d('ROUTE', 'redirect check location=$location');
     // Splash always decides for itself.
     if (location == AppPages.splash) return null;
     final session = _currentSession();
@@ -29,9 +33,15 @@ final GoRouter appRouter = GoRouter(
         location == AppPages.auth || location == AppPages.password;
 
     // Unauthenticated users may not enter the dashboard.
-    if (!loggedIn && goingHome) return AppPages.auth;
+    if (!loggedIn && goingHome) {
+      AppLogger.i('ROUTE', 'guard: guest → $location blocked, redirect ${AppPages.auth}');
+      return AppPages.auth;
+    }
     // Authenticated users skip the login screens.
-    if (loggedIn && goingAuth) return AppPages.home;
+    if (loggedIn && goingAuth) {
+      AppLogger.i('ROUTE', 'guard: authed user skips $location → ${AppPages.home}');
+      return AppPages.home;
+    }
     return null;
   },
   routes: [

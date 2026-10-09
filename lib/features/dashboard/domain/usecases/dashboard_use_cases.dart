@@ -5,6 +5,7 @@ import 'get_best_server.dart';
 import 'get_vpn_servers.dart';
 import 'search_servers.dart';
 import 'select_vpn_server.dart';
+import 'watch_connection_detail.dart';
 
 class DashboardUseCases {
   const DashboardUseCases({
@@ -14,6 +15,7 @@ class DashboardUseCases {
     required this.getVpnServers,
     required this.getBestServer,
     required this.searchServers,
+    required this.watchConnectionDetail,
   });
 
   final ConnectVpnUseCase connectVpn;
@@ -22,6 +24,7 @@ class DashboardUseCases {
   final GetVpnServersUseCase getVpnServers;
   final GetBestServerUseCase getBestServer;
   final SearchServersUseCase searchServers;
+  final WatchConnectionDetailUseCase watchConnectionDetail;
 
   factory DashboardUseCases.fromRepository(VpnRepository repository) {
     return DashboardUseCases(
@@ -31,6 +34,7 @@ class DashboardUseCases {
       getVpnServers: GetVpnServersUseCase(repository),
       getBestServer: GetBestServerUseCase(repository),
       searchServers: SearchServersUseCase(repository),
+      watchConnectionDetail: WatchConnectionDetailUseCase(repository),
     );
   }
 }

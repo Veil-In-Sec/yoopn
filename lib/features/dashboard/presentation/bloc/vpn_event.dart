@@ -22,3 +22,11 @@ final class VpnServersRequested extends VpnEvent {
 
   final bool forceRefresh;
 }
+
+/// Internal: engine sub-stage text while connecting (e.g. `Assigning IP…`).
+/// Forwarded from [VpnTunnel.stageTextStream] so the UI detail line stays live.
+final class VpnConnectionDetailChanged extends VpnEvent {
+  const VpnConnectionDetailChanged(this.detail);
+
+  final String detail;
+}

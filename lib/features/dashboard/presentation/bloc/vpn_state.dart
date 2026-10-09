@@ -8,12 +8,16 @@ enum VpnServersStatus { initial, loading, loaded, failure }
 class VpnState {
   const VpnState({
     this.status = VpnStatus.disconnected,
-    this.server = 'United States',
+    // Placeholder only. It is replaced by the best live relay as soon as
+    // `VpnServersRequested` resolves, so connect never targets an empty id.
+    this.server = '',
     this.errorMessage,
     this.servers = VpnServer.availableServers,
     this.serversStatus = VpnServersStatus.initial,
     this.serversError,
     this.connectedSince,
+    this.connectionDetail = '',
+    this.connectStartedAt,
   });
 
   final VpnStatus status;
@@ -30,6 +34,15 @@ class VpnState {
   /// When the current connection started (null while disconnected).
   /// Drives the connection-duration readout; cleared on disconnect.
   final DateTime? connectedSince;
+
+  /// Live engine sub-stage while connecting (e.g. `Authenticating…`).
+  /// Empty when idle. Shown under "Connecting…" so slow relays don't look
+  /// frozen, and mirrored to Supabase telemetry on failure.
+  final String connectionDetail;
+
+  /// When the current connect attempt started (null unless connecting).
+  /// Drives the elapsed-seconds readout next to [connectionDetail].
+  final DateTime? connectStartedAt;
 
   bool get isLoadingServers => serversStatus == VpnServersStatus.loading;
 
@@ -48,10 +61,14 @@ class VpnState {
     VpnServersStatus? serversStatus,
     String? serversError,
     DateTime? connectedSince,
+    String? connectionDetail,
+    DateTime? connectStartedAt,
   }) {
-    // Disconnect clears the timer; an explicit connectedSince sets it.
+    // Disconnect clears both timers; an explicit connectedSince sets it.
+    final effectiveStatus = status ?? this.status;
+    final isConnecting = effectiveStatus == VpnStatus.connecting;
     final clearedTimer =
-        status == VpnStatus.disconnected && connectedSince == null;
+        effectiveStatus == VpnStatus.disconnected && connectedSince == null;
     return VpnState(
       status: status ?? this.status,
       server: server ?? this.server,
@@ -60,6 +77,12 @@ class VpnState {
       serversStatus: serversStatus ?? this.serversStatus,
       serversError: serversError,
       connectedSince: clearedTimer ? null : (connectedSince ?? this.connectedSince),
+      connectionDetail: isConnecting
+          ? (connectionDetail ?? this.connectionDetail)
+          : '',
+      connectStartedAt: isConnecting
+          ? (connectStartedAt ?? this.connectStartedAt)
+          : connectStartedAt,
     );
   }
 
@@ -73,6 +96,8 @@ class VpnState {
       other.serversStatus == serversStatus &&
       other.serversError == serversError &&
       other.connectedSince == connectedSince &&
+      other.connectionDetail == connectionDetail &&
+      other.connectStartedAt == connectStartedAt &&
       listEquals(other.servers, servers);
 
   @override
@@ -83,5 +108,7 @@ class VpnState {
     serversStatus,
     serversError,
     connectedSince,
+    connectionDetail,
+    connectStartedAt,
   );
 }

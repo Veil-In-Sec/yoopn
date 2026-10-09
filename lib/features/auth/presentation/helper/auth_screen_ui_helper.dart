@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/resources/app_assets.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:yoopn/features/auth/presentation/helper/auth_page_data.dart';
 
@@ -43,6 +44,7 @@ void startAutoPlay(Timer? timer, Duration autoPlayInterval, PageController pageC
 }
 
 void showOtpDialog(BuildContext context, String email) {
+  AppLogger.i('UI', 'showOtpDialog for ${AppLogger.maskEmail(email)}');
   final otpController = TextEditingController();
   showDialog(
     context: context,
@@ -90,9 +92,12 @@ void showOtpDialog(BuildContext context, String email) {
           ElevatedButton(
             onPressed: () {
               final otp = otpController.text.trim();
+              AppLogger.i('UI', 'OTP dialog Verify tapped len=${otp.length}');
               if (otp.isNotEmpty) {
                 Navigator.of(dialogContext).pop();
                 context.read<AuthBloc>().add(AuthOtpSubmitted(otp));
+              } else {
+                AppLogger.w('UI', 'OTP dialog empty — ignored');
               }
             },
             child: const Text('Verify'),

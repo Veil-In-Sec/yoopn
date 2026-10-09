@@ -7,6 +7,7 @@ import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/resources/app_assets.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
+import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:yoopn/features/auth/presentation/widgets/password_field.dart';
 
@@ -28,23 +29,29 @@ class _PasswordScreenState extends State<PasswordScreen> {
   }
 
   void _submit() {
+    AppLogger.i('UI', 'PasswordScreen Continue tapped');
     if (_formKey.currentState?.validate() ?? false) {
       context.read<AuthBloc>().add(
         AuthPasswordSubmitted(_passwordController.text),
       );
+    } else {
+      AppLogger.w('UI', 'PasswordScreen form invalid');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    AppLogger.d('UI', 'PasswordScreen build');
     return BlocListener<AuthBloc, AuthState>(
       listenWhen: (prev, curr) =>
           prev.status != curr.status ||
           prev.errorMsg != curr.errorMsg ||
           prev.message != curr.message,
       listener: (context, state) {
+        AppLogger.i('UI', 'PasswordScreen listener status=${state.status} err=${state.errorMsg}');
         switch (state.status) {
           case AuthStatus.success:
+            AppLogger.i('ROUTE', 'password → home');
             context.go(AppPages.home);
             break;
           case AuthStatus.failure:

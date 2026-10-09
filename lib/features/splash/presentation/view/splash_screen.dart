@@ -8,14 +8,18 @@ import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/features/splash/presentation/bloc/splash_bloc.dart';
 
 class SplashScreen extends StatelessWidget {
-  const new({super.key});
+  const SplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<SplashBloc, SplashState>(
       listener: (context, state) {
         switch (state.status) {
-          case SplashStatus.loaded:
+          case SplashStatus.authenticated:
+            context.pushReplacement(AppPages.home);
+            break;
+
+          case SplashStatus.unauthenticated:
             context.pushReplacement(AppPages.auth);
             break;
 
@@ -26,10 +30,12 @@ class SplashScreen extends StatelessWidget {
                 action: SnackBarAction(
                   label: "Retry",
                   onPressed: () =>
-                      context.read<SplashBloc>()..add(AppStarted()),
+                      context.read<SplashBloc>().add(const AppStarted()),
                 ),
               ),
             );
+            // Fallback so app never freezes on splash screen
+            context.pushReplacement(AppPages.auth);
             break;
 
           case SplashStatus.loading:

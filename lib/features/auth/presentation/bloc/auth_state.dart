@@ -1,30 +1,38 @@
 part of 'auth_bloc.dart';
 
-enum AuthStatus { initial, loading, success, failure }
+enum AuthStatus { initial, loading, emailSubmitted, otpSent, success, failure }
 
 final class AuthState extends Equatable {
   final AuthStatus status;
   final String? errorMsg;
+  final String? message;
   final String email;
+  final supabase.Session? session;
 
   const AuthState({
     this.status = AuthStatus.initial,
     this.errorMsg,
+    this.message,
     this.email = '',
+    this.session,
   });
 
   AuthState copyWith({
     AuthStatus? status,
     String? errorMsg,
+    String? message,
     String? email,
+    supabase.Session? session,
   }) {
     return AuthState(
       status: status ?? this.status,
       errorMsg: errorMsg,
+      message: message,
       email: email ?? this.email,
+      session: session ?? this.session,
     );
   }
 
   @override
-  List<Object?> get props => [status, errorMsg, email];
+  List<Object?> get props => [status, errorMsg, message, email, session];
 }

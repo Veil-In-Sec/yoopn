@@ -13,6 +13,6 @@ Future<void> init_dependency_injection() async {
 
 Future<void> _factory_registry() async {
   sl.registerLazySingleton<SupabaseClient>(() => Supabase.instance.client);
-  sl.registerFactory<SplashBloc>(() => SplashBloc());
-  sl.registerFactory<AuthBloc>(() => AuthBloc());
+  sl.registerFactory<SplashBloc>(() => SplashBloc(supabaseClient: sl<SupabaseClient>()));
+  sl.registerFactory<AuthBloc>(() => AuthBloc(supabaseClient: sl<SupabaseClient>()));
 }

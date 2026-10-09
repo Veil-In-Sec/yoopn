@@ -7,7 +7,7 @@ import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:yoopn/features/splash/presentation/bloc/splash_bloc.dart';
 
 class YooPNApp extends StatelessWidget {
-  const new({super.key});
+  const YooPNApp({super.key});
 
   @override
   Widget build(BuildContext context) {

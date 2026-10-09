@@ -1,6 +1,6 @@
 part of 'splash_bloc.dart';
 
-enum SplashStatus { loading, loaded, error }
+enum SplashStatus { loading, authenticated, unauthenticated, error }
 
 final class SplashState extends Equatable {
   final SplashStatus status;

@@ -1,14 +1,18 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:yoopn/core/utils/internet_connections.dart';
 
 part 'splash_event.dart';
 part 'splash_state.dart';
 
 class SplashBloc extends Bloc<SplashEvent, SplashState> {
-  SplashBloc() : super(const SplashState()) {
+  final SupabaseClient _supabaseClient;
+
+  SplashBloc({SupabaseClient? supabaseClient})
+      : _supabaseClient = supabaseClient ?? Supabase.instance.client,
+        super(const SplashState()) {
     on<AppStarted>(_onAppStarted);
-    // on<AppCrashed>(_onAppCrashed);
   }
 
   Future<void> _onAppStarted(
@@ -17,20 +21,31 @@ class SplashBloc extends Bloc<SplashEvent, SplashState> {
   ) async {
     emit(state.copyWith(status: SplashStatus.loading));
 
-    await Future.delayed(const Duration(seconds: 4));
-    if (await InternetUtils.isConnected()) {
-      emit(state.copyWith(status: SplashStatus.loaded));
-    } else {
-      emit(state.copyWith(status: SplashStatus.error, errorMsg: "Please connect to internet!"));
-    }
-  }
+    await Future.delayed(const Duration(milliseconds: 800));
 
-  // Future<void> _onAppCrashed(
-  //   AppCrashed event,
-  //   Emitter<SplashState> emit,
-  // ) async {
-  //   emit(
-  //     state.copyWith(status: SplashStatus.error, errorMsg: event.toString()),
-  //   );
-  // }
+    // Check if user session is present in Supabase
+    Session? session = _supabaseClient.auth.currentSession;
+
+    // If session is still null, wait briefly for local storage session restoration
+    if (session == null) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      session = _supabaseClient.auth.currentSession;
+    }
+
+    if (session != null) {
+      emit(state.copyWith(status: SplashStatus.authenticated));
+      return;
+    }
+
+    final isConnected = await InternetUtils.isConnected();
+    if (!isConnected) {
+      emit(state.copyWith(
+        status: SplashStatus.error,
+        errorMsg: "Please connect to the internet!",
+      ));
+      return;
+    }
+
+    emit(state.copyWith(status: SplashStatus.unauthenticated));
+  }
 }

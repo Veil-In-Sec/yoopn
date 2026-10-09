@@ -4,6 +4,7 @@ import 'package:yoopn/core/routes/app_routes.dart';
 import 'package:yoopn/core/themes/app_theme.dart';
 import 'package:yoopn/core/utils/dependency_injection.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
 import 'package:yoopn/features/splash/presentation/bloc/splash_bloc.dart';
 
 class YooPNApp extends StatelessWidget {
@@ -15,6 +16,7 @@ class YooPNApp extends StatelessWidget {
       providers: [
         BlocProvider(create: (_) => sl<SplashBloc>()..add(const AppStarted())),
         BlocProvider(create: (_) => sl<AuthBloc>()),
+        BlocProvider(create: (_) => sl<VpnBloc>()),
       ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,

@@ -2,6 +2,11 @@
 
 import 'package:get_it/get_it.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:yoopn/features/dashboard/data/datasources/vpn_data_source.dart';
+import 'package:yoopn/features/dashboard/data/repositories/vpn_repository_impl.dart';
+import 'package:yoopn/features/dashboard/domain/repositories/vpn_repository.dart';
+import 'package:yoopn/features/dashboard/domain/usecases/dashboard_use_cases.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
 import 'package:yoopn/features/auth/data/datasources/auth_remote_data_source.dart';
 import 'package:yoopn/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:yoopn/features/auth/domain/repositories/auth_repository.dart';
@@ -35,4 +40,12 @@ Future<void> _factory_registry() async {
       useCases: sl<AuthUseCases>(),
     ),
   );
+  sl.registerLazySingleton<VpnDataSource>(() => const SimulatedVpnDataSource());
+  sl.registerLazySingleton<VpnRepository>(
+    () => VpnRepositoryImpl(dataSource: sl<VpnDataSource>()),
+  );
+  sl.registerFactory<DashboardUseCases>(
+    () => DashboardUseCases.fromRepository(sl<VpnRepository>()),
+  );
+  sl.registerFactory<VpnBloc>(() => VpnBloc(useCases: sl<DashboardUseCases>()));
 }

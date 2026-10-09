@@ -2,7 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/features/auth/presentation/view/auth_screen.dart';
 import 'package:yoopn/features/auth/presentation/view/password_screen.dart';
-import 'package:yoopn/features/home/presentation/view/home_screen.dart';
+import 'package:yoopn/features/dashboard/presentation/view/dashboard_screen.dart';
 import 'package:yoopn/features/splash/presentation/view/splash_screen.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -16,7 +16,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppPages.home,
       name: AppPages.home,
-      builder: (context, state) => const HomeScreen(),
+      builder: (context, state) => const DashboardScreen(),
     ),
     GoRoute(
       path: AppPages.auth,

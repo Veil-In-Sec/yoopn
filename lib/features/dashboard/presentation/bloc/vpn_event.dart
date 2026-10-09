@@ -15,3 +15,10 @@ final class VpnServerSelected extends VpnEvent {
 
   final String server;
 }
+
+/// Fetch the live VPNGate relay list.
+final class VpnServersRequested extends VpnEvent {
+  const VpnServersRequested({this.forceRefresh = false});
+
+  final bool forceRefresh;
+}

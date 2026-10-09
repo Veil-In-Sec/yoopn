@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/view/screens/home_screen.dart';
 import 'package:yoopn/features/dashboard/presentation/view/screens/profile_screen.dart';
 import 'package:yoopn/features/dashboard/presentation/view/screens/speed_test_screen.dart';
@@ -18,6 +20,15 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final ValueNotifier<int> _index = ValueNotifier<int>(0);
+
+  @override
+  void initState() {
+    super.initState();
+    // Load the live VPNGate relay list once per dashboard entry.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<VpnBloc>().add(const VpnServersRequested());
+    });
+  }
 
   @override
   void dispose() {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -70,10 +72,61 @@ class StatusPanel extends StatelessWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
+              if (active) ...[
+                SizedBox(height: 8.h),
+                const _ConnectionTimer(),
+              ],
             ],
           ),
         );
       },
+    );
+  }
+}
+
+/// Ticks every second while connected, showing session duration.
+/// Rebuilds only itself — never the connect button or server list.
+class _ConnectionTimer extends StatefulWidget {
+  const _ConnectionTimer();
+
+  @override
+  State<_ConnectionTimer> createState() => _ConnectionTimerState();
+}
+
+class _ConnectionTimerState extends State<_ConnectionTimer> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final since = context.select<VpnBloc, DateTime?>(
+      (bloc) => bloc.state.connectedSince,
+    );
+    if (since == null) return const SizedBox.shrink();
+    final elapsed = DateTime.now().difference(since);
+    final h = elapsed.inHours.toString().padLeft(2, '0');
+    final m = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+    return Text(
+      'Connected $h:$m:$s',
+      style: TextStyle(
+        fontSize: 12.sp,
+        fontWeight: FontWeight.w600,
+        color: AppColors.primary,
+      ),
     );
   }
 }

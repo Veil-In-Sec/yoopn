@@ -20,9 +20,26 @@ class _FakeVpnRepository implements VpnRepository {
   @override
   VpnServer? findServer(String name) {
     for (final server in VpnServer.availableServers) {
-      if (server.name == name) return server;
+      if (server.matchesId(name)) return server;
     }
     return null;
+  }
+
+  @override
+  Future<List<VpnServer>> getServers({bool forceRefresh = false}) async =>
+      VpnServer.availableServers;
+
+  @override
+  Future<VpnServer?> getBestServer() async =>
+      VpnServer.availableServers.first;
+
+  @override
+  Future<List<VpnServer>> searchServers(String query) async {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return VpnServer.availableServers;
+    return VpnServer.availableServers
+        .where((s) => s.name.toLowerCase().contains(q))
+        .toList();
   }
 }
 

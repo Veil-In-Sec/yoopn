@@ -4,12 +4,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/dimentions/spacings.dart';
-import 'package:yoopn/core/resources/app_assets.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/core/utils/app_validators.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:yoopn/features/auth/presentation/helper/auth_page_data.dart';
+import 'package:yoopn/features/auth/presentation/helper/auth_screen_ui_helper.dart';
 import 'package:yoopn/features/auth/presentation/widgets/auth_divider.dart';
 import 'package:yoopn/features/auth/presentation/widgets/auth_page_view.dart';
 
@@ -26,104 +25,10 @@ class _AuthScreenState extends State<AuthScreen> {
   int _currentPage = 0;
   Timer? _timer;
 
-  static const List<AuthPageData> _pages = [
-    AuthPageData(
-      lottiePath: AppAssets.securityAnime,
-      title: "Secure & Protected",
-      subtitle:
-          "Your information is secured by \nPost Quantum realtime encryption.",
-    ),
-    AuthPageData(
-      lottiePath: AppAssets.vpnAnime,
-      title: "Break Borders,\nBrowse Anywhere",
-      subtitle:
-          "Access blocked content globally, \nany websites, anytime, anywhere.",
-    ),
-    AuthPageData(
-      lottiePath: AppAssets.speedAnime,
-      title: "Fast & Stable",
-      subtitle:
-          "High speed server worldwide everywhere, \nno drops or waiting.",
-    ),
-  ];
-
   @override
   void initState() {
     super.initState();
-    _startAutoPlay();
-  }
-
-  void _startAutoPlay() {
-    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (_pageController.hasClients) {
-        final nextPage = (_currentPage + 1) % _pages.length;
-        _pageController.animateToPage(
-          nextPage,
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
-  }
-
-  void _showOtpDialog(BuildContext context, String email) {
-    final otpController = TextEditingController();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: Text(
-            'Enter Verification Code',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'A verification link and 6-digit code were sent to $email.\nClick the link in your email or enter the code below:',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-              ),
-              Spacing.vertical(16),
-              TextField(
-                controller: otpController,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: const InputDecoration(
-                  hintText: '123456',
-                  counterText: '',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel',
-                  style: TextStyle(color: AppColors.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final otp = otpController.text.trim();
-                if (otp.isNotEmpty) {
-                  Navigator.of(dialogContext).pop();
-                  context.read<AuthBloc>().add(AuthOtpSubmitted(otp));
-                }
-              },
-              child: const Text('Verify'),
-            ),
-          ],
-        );
-      },
-    );
+    startAutoPlay(_pageController, _currentPage);
   }
 
   @override
@@ -152,7 +57,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 backgroundColor: AppColors.primary,
               ),
             );
-            _showOtpDialog(context, state.email);
+            showOtpDialog(context, state.email);
             break;
           case AuthStatus.failure:
             ScaffoldMessenger.of(context).showSnackBar(
@@ -185,9 +90,9 @@ class _AuthScreenState extends State<AuthScreen> {
                           _currentPage = index;
                         });
                       },
-                      itemCount: _pages.length,
+                      itemCount: pages.length,
                       itemBuilder: (context, index) {
-                        final pageData = _pages[index];
+                        final pageData = pages[index];
                         return AnimatedBuilder(
                           animation: _pageController,
                           builder: (context, child) {
@@ -219,7 +124,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      _pages.length,
+                      pages.length,
                       (index) => AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         margin: const EdgeInsets.symmetric(horizontal: 4.0),

@@ -33,12 +33,26 @@ class DioLoggerInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    AppLogger.e(
-      'NET',
-      '✖ ${err.type.name} ${err.requestOptions.method} ${err.requestOptions.uri} | ${err.message}',
-      err.error,
-      err.stackTrace,
-    );
+    // Timeouts and deliberate cancels (budget cutoffs) are routine control
+    // flow, not crashes: log them quietly without a stack dump so real
+    // failures stay visible in logcat.
+    if (err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.sendTimeout ||
+        err.type == DioExceptionType.receiveTimeout ||
+        err.type == DioExceptionType.cancel) {
+      AppLogger.w(
+        'NET',
+        '✖ ${err.type.name} ${err.requestOptions.method} '
+        '${err.requestOptions.uri}',
+      );
+    } else {
+      AppLogger.e(
+        'NET',
+        '✖ ${err.type.name} ${err.requestOptions.method} ${err.requestOptions.uri} | ${err.message}',
+        err.error,
+        err.stackTrace,
+      );
+    }
     super.onError(err, handler);
   }
 }

@@ -30,6 +30,15 @@ abstract interface class VpnTunnel {
   Future<void> connect(VpnServer server);
 
   Future<void> disconnect();
+
+  /// Reconciles with the OS tunnel after an app restart.
+  ///
+  /// The native VpnService outlives the Flutter process: kill the app while
+  /// connected and the OS keeps routing traffic (status-bar VPN icon stays
+  /// on) while a fresh app instance boots believing it is disconnected.
+  /// Returns true when the engine reports a live tunnel, which the caller
+  /// should adopt as its state. Never throws — false means "not connected".
+  Future<bool> syncState();
 }
 
 class SimulatedVpnTunnel implements VpnTunnel {
@@ -93,6 +102,12 @@ class SimulatedVpnTunnel implements VpnTunnel {
     _emit(VpnTunnelStatus.disconnected);
   }
 
+  @override
+  Future<bool> syncState() async {
+    // Fresh instance is always idle — nothing to adopt on desktop/tests.
+    return _status == VpnTunnelStatus.connected;
+  }
+
   void _emit(VpnTunnelStatus status) {
     AppLogger.d('TUNNEL', 'status $_status → $status');
     _status = status;
@@ -114,6 +129,9 @@ class TunnelVpnDataSource implements VpnDataSource {
 
   @override
   Future<void> disconnect() => tunnel.disconnect();
+
+  @override
+  Future<bool> syncTunnelState() => tunnel.syncState();
 
   @override
   String get lastStageText => tunnel.lastStageText;

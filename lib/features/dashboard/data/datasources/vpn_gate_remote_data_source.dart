@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import '../../domain/entities/vpn_server.dart';
 import '../models/vpn_server_model.dart';
@@ -25,9 +26,11 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
           dio ??
           Dio(
             BaseOptions(
-              connectTimeout: const Duration(seconds: 15),
+              // Fail fast on dead attempts for non-CSV calls. (The CSV fetch
+              // itself uses patient per-request timeouts — see _fetchRawCsv.)
+              connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 15),
-              sendTimeout: const Duration(seconds: 15),
+              sendTimeout: const Duration(seconds: 10),
               responseType: ResponseType.plain,
               headers: const {'Accept': 'text/plain'},
             ),
@@ -65,16 +68,37 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
       AppLogger.d('GATE', 'fetchJson → memory cache (${_jsonCache!.length} rows)');
       return _jsonCache!;
     }
+    final netSw = Stopwatch()..start();
     final csv = await _fetchRawCsv();
-    AppLogger.i('GATE', 'CSV downloaded ${csv.length} chars → parsing…');
-    // Stage 1: CSV -> JSON.
-    final json = VpnServerModel.csvToJson(csv);
-    AppLogger.i('GATE', 'CSV→JSON ${json.length} rows');
+    netSw.stop();
+    AppLogger.i(
+      'GATE',
+      'TIMING network done in ${netSw.elapsedMilliseconds}ms '
+      '(${csv.length} chars)',
+    );
+    // Stage 1: CSV -> JSON, in a background isolate. This walks megabytes
+    // of text — on the UI thread it janks every animation for up to ~2s on
+    // slow phones. `csvToJson` is a pure static function, so `compute` can
+    // run it elsewhere; the row maps cross the isolate boundary fine.
+    final parseSw = Stopwatch()..start();
+    final json = await compute(VpnServerModel.csvToJson, csv);
+    parseSw.stop();
+    AppLogger.i(
+      'GATE',
+      'TIMING CSV→JSON ${json.length} rows in ${parseSw.elapsedMilliseconds}ms',
+    );
     if (json.isEmpty) {
       throw const FormatException('No VPN servers in VPNGate response');
     }
     // Stage 2 (cached alongside so fetchServers never re-parses CSV).
+    final modelSw = Stopwatch()..start();
     final servers = VpnServerModel.serversFromJson(json);
+    modelSw.stop();
+    AppLogger.i(
+      'GATE',
+      'TIMING JSON→models ${servers.length} servers '
+      'in ${modelSw.elapsedMilliseconds}ms',
+    );
     if (servers.isEmpty) {
       throw const FormatException('No VPN servers in VPNGate response');
     }
@@ -97,14 +121,37 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
     return _serverCache!;
   }
 
+  /// Attempts budget for one fetch. Deliberately generous: the visible UI
+  /// abandons waiting after 2s (refresh budget) and the SAME fetch keeps
+  /// going in the background, where patience is free. Short timeouts here
+  /// would kill slow-but-working links that just need 15–20s for megabytes.
+  static const _attempts = 5;
+
   Future<String> _fetchRawCsv() async {
-    // Retry transient network errors with backoff (1s, 2s). Parse errors
-    // throw FormatException and are never retried.
+    // Retry transient network errors with growing backoff (1s..4s). Parse
+    // errors throw FormatException and are never retried.
     Object? lastError;
-    for (var attempt = 0; attempt < 3; attempt++) {
+    for (var attempt = 0; attempt < _attempts; attempt++) {
+      final attemptSw = Stopwatch()..start();
       try {
-        final response = await _dio.get<String>(endpoint);
+        final response = await _dio.get<String>(
+          endpoint,
+          options: Options(
+            // Patient per-request overrides (base Dio stays at 10s for
+            // everything else): a trickling multi-MB CSV must survive slow
+            // handshakes and long idle gaps between chunks.
+            connectTimeout: const Duration(seconds: 30),
+            receiveTimeout: const Duration(seconds: 60),
+            sendTimeout: const Duration(seconds: 30),
+          ),
+        );
         final body = response.data ?? '';
+        attemptSw.stop();
+        AppLogger.i(
+          'GATE',
+          'TIMING attempt ${attempt + 1}/$_attempts ok in '
+          '${attemptSw.elapsedMilliseconds}ms (${body.length} chars)',
+        );
         if (body.isEmpty) {
           throw const FormatException('Empty VPNGate response');
         }
@@ -112,12 +159,16 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
       } on FormatException {
         rethrow;
       } on DioException catch (e) {
-        AppLogger.w('GATE', 'attempt ${attempt + 1}/3 failed: ${e.message}');
-        lastError = e;
+        attemptSw.stop();
+        AppLogger.w(
+          'GATE',
+          'TIMING attempt ${attempt + 1}/$_attempts ${e.type.name} after '
+          '${attemptSw.elapsedMilliseconds}ms: ${e.message}',
+        );
         final detail =
             e.message ?? e.error?.toString() ?? 'Failed to reach VPNGate';
         lastError = Exception('VPNGate request failed: $detail');
-        if (attempt < 2) {
+        if (attempt < _attempts - 1) {
           await Future<void>.delayed(Duration(seconds: attempt + 1));
         }
       }

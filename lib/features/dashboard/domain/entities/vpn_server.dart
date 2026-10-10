@@ -93,8 +93,19 @@ class VpnServer {
   ];
 
   /// Matches a user selection against hostName, ip, or country name.
-  bool matchesId(String query) =>
-      query == hostName || query == ip || query == name || query == id;
+  ///
+  /// Empty queries never match: placeholder servers carry empty
+  /// `hostName`/`ip`, so `'' == hostName` would otherwise resolve an
+  /// unselected state (`server == ''`) to the first fallback entry
+  /// (United States) which has no OpenVPN config and always fails
+  /// with `bad-config`.
+  bool matchesId(String query) {
+    if (query.isEmpty) return false;
+    return query == hostName ||
+        query == ip ||
+        query == name ||
+        query == id;
+  }
 
   /// Serialize for JSON caching / tests. Pairs with `VpnServerModel.fromJson`.
   Map<String, dynamic> toJson() => <String, dynamic>{

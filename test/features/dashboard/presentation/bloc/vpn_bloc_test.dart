@@ -82,6 +82,12 @@ class _FakeVpnRepository implements VpnRepository {
   @override
   Stream<String> get connectionDetailStream => _details.stream;
 
+  @override
+  String get lastConnectionDetail => '';
+
+  @override
+  Future<bool> syncTunnelState() async => false;
+
   void emitDetail(String text) => _details.add(text);
 
   Future<void> dispose() => _details.close();
@@ -114,6 +120,12 @@ class _MixedRepository implements VpnRepository {
 
   @override
   Stream<String> get connectionDetailStream => _details.stream;
+
+  @override
+  String get lastConnectionDetail => '';
+
+  @override
+  Future<bool> syncTunnelState() async => false;
 
   Future<void> dispose() => _details.close();
 
@@ -187,9 +199,9 @@ void main() {
     });
 
     test('refuses to connect when the selection no longer exists', () async {
-      // No servers loaded → selection is the default 'United States' fallback,
-      // which resolves through VpnServer.availableServers, so use a repo that
-      // knows nothing instead.
+      // No live relays — only config-less placeholders — so connect is
+      // blocked before touching the tunnel and a background refresh is
+      // kicked off. Empty ids never match placeholders (matchesId('') == false).
       repository = _FakeVpnRepository(relays: const []);
       await bloc.close();
       bloc = build();
@@ -199,8 +211,7 @@ void main() {
           await bloc.stream.firstWhere((s) => s.errorMessage != null);
 
       expect(repository.connectCalls, 0);
-      expect(failed.errorMessage, 'Selected VPN server is unavailable. '
-          'Refresh the list.');
+      expect(failed.errorMessage, contains('No live servers'));
     });
   });
 
@@ -451,6 +462,12 @@ class _ProbeRepository implements VpnRepository {
 
   @override
   Stream<String> get connectionDetailStream => _details.stream;
+
+  @override
+  String get lastConnectionDetail => '';
+
+  @override
+  Future<bool> syncTunnelState() async => false;
 
   Future<void> dispose() => _details.close();
 

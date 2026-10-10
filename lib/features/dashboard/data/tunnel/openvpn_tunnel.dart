@@ -49,6 +49,9 @@ class OpenVpnTunnel implements VpnTunnel {
   Completer<void>? _connectCompleter;
   String _lastRawStage = '';
   String _stageText = '';
+  String? _lastStatusIn;
+  String? _lastStatusOut;
+  DateTime? _lastStatusLogAt;
   DateTime? _connectStartedAt;
   Timer? _pollTimer;
   bool _cancelRequested = false;
@@ -87,12 +90,33 @@ class OpenVpnTunnel implements VpnTunnel {
       AppLogger.i('TUNNEL', 'OpenVPN engine initialized');
     } catch (e, st) {
       AppLogger.e('TUNNEL', 'OpenVPN.initialize failed', e, st);
-      rethrow;
+      // Raw plugin exceptions used to surface as "Something went wrong.
+      // Please try again." — wrap them so the user gets an actionable reason.
+      throw VpnException(
+        'init-failed',
+        'Could not start the VPN engine: $e',
+        e,
+      );
     }
   }
 
   void _onEngineStatus(VpnStatus? s) {
     if (s == null) return;
+    // The plugin polls this ~every second while connected. Logging every
+    // tick (including release `developer.log`) is pure overhead — log at
+    // most every 5s on traffic change, plus a 30s heartbeat so silence never
+    // looks like death.
+    final now = DateTime.now();
+    final moved = s.byteIn != _lastStatusIn || s.byteOut != _lastStatusOut;
+    final lastAt = _lastStatusLogAt;
+    final freshEnough =
+        lastAt != null && now.difference(lastAt).inSeconds < 5;
+    final stale =
+        lastAt == null || now.difference(lastAt).inSeconds >= 30;
+    if (freshEnough || (!moved && !stale)) return;
+    _lastStatusIn = s.byteIn;
+    _lastStatusOut = s.byteOut;
+    _lastStatusLogAt = now;
     AppLogger.d(
       'TUNNEL',
       'engine status duration=${s.duration} in=${s.byteIn} out=${s.byteOut}',
@@ -130,14 +154,64 @@ class OpenVpnTunnel implements VpnTunnel {
       case VPNStage.wait_connection:
         return 'Waiting for network…';
       default:
+        // Anything the plugin couldn't map arrives as `VPNStage.unknown`
+        // with the native ics-openvpn status as raw text. Translate the
+        // known ones instead of showing "Working… (<cryptic>)":
+        // - `auth_failed`: login rejected (handled as terminal elsewhere).
+        // - `noprocess`: no OpenVPN process running (idle, post-exit).
+        // - `reconnecting`: engine retrying the same endpoint internally.
+        // - `add_routes`: healthy handshake between ASSIGN_IP and CONNECTED.
+        // - `nonetwork`: device has no data path right now.
+        final lower = rawStage.toLowerCase();
+        if (lower.contains('auth_fail')) {
+          return 'Login rejected…';
+        }
+        if (lower.contains('noprocess')) {
+          return 'Disconnected';
+        }
+        if (lower.contains('reconnect')) {
+          return 'Retrying…';
+        }
+        if (lower.contains('add_routes')) {
+          return 'Setting up routes…';
+        }
+        if (lower.contains('nonetwork') || lower.contains('no network')) {
+          return 'Waiting for network…';
+        }
         return 'Working… ($rawStage)';
     }
   }
 
   void _onEngineStage(VPNStage stage, String rawStage) {
     _lastRawStage = rawStage;
-    final mapped = _mapStage(stage);
-    _stageText = stageText(stage, rawStage);
+    final rawLower = rawStage.toLowerCase();
+    // `no_connection` is the engine's pre-handshake idle report — same
+    // family as the initial `disconnected` reset (seen at +0s before
+    // tcp_connect). Normalize it so status mapping, detail text and the
+    // pending-attempt verdict treat it identically, instead of showing
+    // "Working… (no_connection)".
+    final effectiveStage =
+        stage == VPNStage.unknown && rawLower.contains('no_connection')
+            ? VPNStage.disconnected
+            : stage;
+    // `auth_failed` arrives as VPNStage.unknown: the relay rejected the
+    // `vpn`/`vpn` login (full, shutting down, or private credentials). Treat
+    // it as terminal — waiting for `exiting` only wastes ~10s and then
+    // misreports it as a network drop.
+    final authRejected = rawLower.contains('auth_fail');
+    // `noprocess` means no OpenVPN process exists (idle / post-exit
+    // cleanup). It must never flip the status back to "connecting" (as seen
+    // in logs: it arrived right after a failure was reported) and never
+    // resolves a pending attempt — `exiting`/`disconnected` carry the verdict.
+    final isIdleSignal = rawLower.contains('noprocess');
+    var mapped = _mapStage(effectiveStage);
+    if (stage == VPNStage.unknown && authRejected) {
+      mapped = VpnTunnelStatus.error;
+    }
+    if (isIdleSignal) {
+      mapped = VpnTunnelStatus.disconnected;
+    }
+    _stageText = stageText(effectiveStage, rawStage);
     final elapsed = _connectStartedAt == null
         ? ''
         : ' +${DateTime.now().difference(_connectStartedAt!).inSeconds}s';
@@ -148,47 +222,65 @@ class OpenVpnTunnel implements VpnTunnel {
     // Resolve a pending connect() wait.
     final c = _connectCompleter;
     if (c != null && !c.isCompleted) {
-      switch (stage) {
-        case VPNStage.connected:
-          c.complete();
-          break;
-        case VPNStage.denied:
-          c.completeError(
-            const VpnException(
-              'permission-denied',
-              'VPN permission denied. Allow the VPN request and try again.',
-            ),
-          );
-          break;
-        case VPNStage.error:
-          c.completeError(
-            VpnException(
-              'connect-failed',
-              'VPN connection failed ($rawStage). Try another server.',
-            ),
-          );
-          break;
-        case VPNStage.disconnected:
-        case VPNStage.exiting:
-          // The engine emits `disconnected` as its initial reset right after
-          // connect() is called — ignore those for a 2s grace period so a
-          // healthy handshake is never failed instantly. A later drop is real.
-          final sinceStart = _connectStartedAt == null
-              ? Duration.zero
-              : DateTime.now().difference(_connectStartedAt!);
-          if (sinceStart < const Duration(seconds: 2)) {
-            AppLogger.d('TUNNEL', 'ignoring early $stage during grace period');
+      if (stage == VPNStage.unknown && authRejected) {
+        c.completeError(
+          const VpnException(
+            'auth-rejected',
+            'This relay rejected the login (it may be full or offline). Try another server.',
+          ),
+        );
+      } else if (isIdleSignal) {
+        AppLogger.d('TUNNEL', 'ignoring idle noprocess signal');
+      } else {
+        // Polled verifications arrive as `poll:<stage>` — strip the prefix
+        // so user-facing messages read "(exiting)", not "(poll:exiting)".
+        final displayRaw = rawStage.startsWith('poll:')
+            ? rawStage.substring(5)
+            : rawStage;
+        // NOTE: switched on effectiveStage so a normalized `no_connection`
+        // follows the `disconnected` path (2s grace, then a real verdict).
+        switch (effectiveStage) {
+          case VPNStage.connected:
+            c.complete();
             break;
-          }
-          c.completeError(
-            VpnException(
-              'connect-failed',
-              'VPN dropped during connect ($rawStage). Try another server.',
-            ),
-          );
-          break;
-        default:
-          break; // still in progress
+          case VPNStage.denied:
+            c.completeError(
+              const VpnException(
+                'permission-denied',
+                'VPN permission denied. Allow the VPN request and try again.',
+              ),
+            );
+            break;
+          case VPNStage.error:
+            c.completeError(
+              VpnException(
+                'connect-failed',
+                'VPN connection failed ($displayRaw). Try another server.',
+              ),
+            );
+            break;
+          case VPNStage.disconnected:
+          case VPNStage.exiting:
+            // The engine emits `disconnected` as its initial reset right after
+            // connect() is called — ignore those for a 2s grace period so a
+            // healthy handshake is never failed instantly. A later drop is real.
+            final sinceStart = _connectStartedAt == null
+                ? Duration.zero
+                : DateTime.now().difference(_connectStartedAt!);
+            if (sinceStart < const Duration(seconds: 2)) {
+              AppLogger.d('TUNNEL', 'ignoring early $stage during grace period');
+              break;
+            }
+            c.completeError(
+              VpnException(
+                'connect-failed',
+                'VPN dropped during connect ($displayRaw). Try another server.',
+              ),
+            );
+            break;
+          default:
+            break; // still in progress
+        }
       }
     }
   }
@@ -250,18 +342,81 @@ class OpenVpnTunnel implements VpnTunnel {
       }
     }
 
-    // Many `remote` lines cause ANR on some devices, so keep one. The
-    // plugin's static filteredConfig() throws RangeError when the config has
-    // exactly one remote (Random().nextInt(remotes.length - 1) == nextInt(0)),
-    // so do it locally and only when there is something to collapse.
-    final config = _singleRemoteConfig(rawConfig);
+    // A VPNGate config can list several `remote` endpoints (UDP + TCP
+    // fallbacks). Collapsing to the FIRST remote only — usually UDP — meant
+    // carriers/Wi-Fi that block UDP stalled until the 30s timeout even when
+    // a TCP 443 fallback in the same config would have worked. Try every
+    // route instead: TCP/443 first, then file order.
+    final candidates = _remoteVariants(rawConfig);
+    AppLogger.i(
+      'TUNNEL',
+      '${candidates.length} route(s) to try for ${server.id}',
+    );
 
+    _cancelRequested = false;
+    VpnException? lastError;
+    for (var i = 0; i < candidates.length; i++) {
+      if (i > 0) {
+        if (_cancelRequested) break;
+        _setStage('Trying next route… (${i + 1}/${candidates.length})');
+      }
+      try {
+        await _attemptConnect(
+          server,
+          candidates[i],
+          _perAttemptTimeout(candidates.length),
+        );
+        AppLogger.i(
+          'TUNNEL',
+          'real VPN connected ${server.id} '
+          'via route ${i + 1}/${candidates.length}',
+        );
+        return;
+      } on VpnException catch (e) {
+        // User cancel / permission denial must surface immediately —
+        // never fall through to the next route.
+        if (e.code == 'cancelled' || e.code == 'permission-denied') rethrow;
+        lastError = e;
+        AppLogger.w(
+          'TUNNEL',
+          'route ${i + 1}/${candidates.length} failed: $e',
+        );
+        _teardown();
+        if (_cancelRequested) {
+          throw const VpnException('cancelled', 'Connection cancelled.');
+        }
+      }
+    }
+    throw lastError ??
+        const VpnException(
+          'connect-failed',
+          'Could not connect. Try another server.',
+        );
+  }
+
+  /// Total [connectTimeout] split across routes (min 8s each) so a
+  /// multi-route config still fits roughly the same overall budget.
+  Duration _perAttemptTimeout(int routes) {
+    if (routes <= 1) return connectTimeout;
+    final per = connectTimeout.inSeconds ~/ routes;
+    return Duration(seconds: per < 8 ? 8 : per);
+  }
+
+  void _setStage(String text) {
+    _stageText = text;
+    if (!_stageController.isClosed) _stageController.add(text);
+  }
+
+  /// One dial attempt against a single-remote [config].
+  Future<void> _attemptConnect(
+    VpnServer server,
+    String config,
+    Duration timeout,
+  ) async {
     _emit(VpnTunnelStatus.connecting);
-    _stageText = 'Preparing…';
-    if (!_stageController.isClosed) _stageController.add(_stageText);
+    _setStage('Preparing…');
     _connectCompleter = Completer<void>();
     _connectStartedAt = DateTime.now();
-    _cancelRequested = false;
 
     // CRITICAL: on Android this Future only completes when the tunnel
     // STOPS (it wraps the native VpnService lifecycle) — it never completes
@@ -306,15 +461,14 @@ class OpenVpnTunnel implements VpnTunnel {
 
     AppLogger.d(
       'TUNNEL',
-      'waiting up to ${connectTimeout.inSeconds}s for connected stage…',
+      'waiting up to ${timeout.inSeconds}s for connected stage…',
     );
     try {
-      await _connectCompleter!.future.timeout(connectTimeout);
+      await _connectCompleter!.future.timeout(timeout);
       if (_cancelRequested) {
         AppLogger.i('TUNNEL', 'connect cancelled while waiting');
         throw const VpnException('cancelled', 'Connection cancelled.');
       }
-      AppLogger.i('TUNNEL', 'real VPN connected ${server.id}');
     } on TimeoutException catch (e) {
       String last = _lastRawStage;
       try {
@@ -323,7 +477,7 @@ class OpenVpnTunnel implements VpnTunnel {
       } catch (_) {}
       AppLogger.e(
         'TUNNEL',
-        'connect timed out after $connectTimeout (last stage=$last)',
+        'connect timed out after $timeout (last stage=$last)',
         e,
       );
       _teardown();
@@ -351,39 +505,76 @@ class OpenVpnTunnel implements VpnTunnel {
     _connectCompleter = null;
   }
 
-  /// Collapse a config to a single `remote` line.
+  /// Split a config into one single-`remote` variant per endpoint.
   ///
-  /// The plugin's `OpenVPN.filteredConfig` picks a random remote via
-  /// `Random().nextInt(remotes.length - 1)`, which throws RangeError for a
-  /// single-remote config. Returns the input unchanged when there is 0 or 1
-  /// remote. When several exist, keep the first: VPNGate lists them in
-  /// server-preference order, so it is the relay's own best candidate.
-  static String _singleRemoteConfig(String config) {
+  /// Replaces the old collapse-to-first-remote (which also mistook the
+  /// `remote-random` flag for an endpoint and could keep it while dropping
+  /// the real remotes). Ordering: explicit TCP and port 443 first — those
+  /// are rarely blocked — then the relay's original file order for the rest
+  /// (VPNGate lists remotes in server-preference order).
+  ///
+  /// Returns the input unchanged when there are 0 or 1 remotes. The plugin's
+  /// static `filteredConfig()` is avoided: it throws RangeError on a
+  /// single-remote config (`Random().nextInt(remotes.length - 1)`).
+  static List<String> _remoteVariants(String config) {
     final lines = config.split('\n');
     final remoteIndexes = <int>[];
     for (var i = 0; i < lines.length; i++) {
-      final t = lines[i].trim().toLowerCase();
-      if (t.startsWith('remote ') || t.startsWith('remote-random ')) {
-        remoteIndexes.add(i);
-      }
+      if (_isRemoteLine(lines[i])) remoteIndexes.add(i);
     }
     if (remoteIndexes.length <= 1) {
-      AppLogger.d('TUNNEL', 'config has ${remoteIndexes.length} remote(s) — unchanged');
-      return config;
+      AppLogger.d(
+        'TUNNEL',
+        'config has ${remoteIndexes.length} remote(s) — unchanged',
+      );
+      return [config];
     }
-    final keep = remoteIndexes.first;
-    final filtered = <String>[];
+    // Base = everything except remote lines and `remote-random` flags (the
+    // flag is meaningless once each variant holds a single remote).
+    final base = <String>[];
     for (var i = 0; i < lines.length; i++) {
-      if (remoteIndexes.contains(i) && i != keep) continue;
-      filtered.add(lines[i]);
+      if (remoteIndexes.contains(i)) continue;
+      if (lines[i].trim().toLowerCase().startsWith('remote-random')) continue;
+      base.add(lines[i]);
     }
-    final out = filtered.join('\n');
+    final remotes = remoteIndexes.map((i) => lines[i]).toList()
+      ..sort((a, b) => _remoteScore(a).compareTo(_remoteScore(b)));
+    final insertAt = remoteIndexes.first.clamp(0, base.length);
     AppLogger.d(
       'TUNNEL',
-      'collapsed ${remoteIndexes.length} remotes → 1 '
-      '(${config.length} → ${out.length} chars)',
+      'split ${remoteIndexes.length} remotes into variants '
+      '(tcp/443 first)',
     );
-    return out;
+    return remotes.map((r) {
+      final out = List<String>.from(base)..insert(insertAt, r);
+      return out.join('\n');
+    }).toList();
+  }
+
+  /// True for real endpoints (`remote <host> [port] [proto]`); false for
+  /// `remote-random` flags, comments and anything else.
+  static bool _isRemoteLine(String line) {
+    final t = line.trim();
+    if (t.isEmpty || t.startsWith('#') || t.startsWith(';')) return false;
+    final lower = t.toLowerCase();
+    if (!lower.startsWith('remote ')) return false;
+    if (lower.startsWith('remote-random')) return false;
+    return t.split(RegExp(r'\s+')).length >= 2;
+  }
+
+  /// Lower dials first: explicit TCP (0) → port 443 (1) → explicit UDP (5)
+  /// → everything else in file order (10).
+  static int _remoteScore(String remoteLine) {
+    final parts = remoteLine.trim().split(RegExp(r'\s+'));
+    var score = 10;
+    for (var k = 2; k < parts.length; k++) {
+      final p = parts[k].toLowerCase();
+      if (p == 'tcp' || p == 'tcp-client') return 0;
+      if (p == 'udp') score = 5;
+    }
+    final port = parts.length > 2 ? int.tryParse(parts[2]) : null;
+    if (port == 443 && score > 1) score = 1;
+    return score;
   }
 
   /// Safety net: if a stage callback is ever missed (activity-result /
@@ -445,6 +636,70 @@ class OpenVpnTunnel implements VpnTunnel {
       AppLogger.e('TUNNEL', 'engine.disconnect threw', e, st);
     }
     _emit(VpnTunnelStatus.disconnected);
+  }
+
+  @override
+  Future<bool> syncState() async {
+    AppLogger.i('TUNNEL', 'syncState — asking engine for the truth');
+    try {
+      await _ensureInitialized();
+    } catch (e) {
+      AppLogger.w('TUNNEL', 'syncState init failed, staying disconnected', e);
+      return false;
+    }
+    VPNStage stage;
+    try {
+      stage = await _engine.stage().timeout(const Duration(seconds: 4));
+    } catch (e) {
+      AppLogger.w('TUNNEL', 'syncState stage read failed: $e');
+      return false;
+    }
+    if (stage == VPNStage.connected) {
+      AppLogger.i('TUNNEL', 'syncState → engine is CONNECTED, adopting');
+      _setStage('Connected');
+      _emit(VpnTunnelStatus.connected);
+      return true;
+    }
+    // Stale non-connected engine state (e.g. a handshake orphaned by the
+    // process kill): stop it so the OS icon and the UI agree on
+    // disconnected — but ONLY when the stage proves a process is alive.
+    // On a fresh boot the service never started and disconnect() NPEs
+    // natively (its void return lets the error escape try/catch as an
+    // unhandled async crash).
+    if (_needsCleanup(stage, '')) {
+      AppLogger.i('TUNNEL', 'syncState → stopping orphaned $stage');
+      try {
+        _engine.disconnect();
+      } catch (e) {
+        AppLogger.w('TUNNEL', 'syncState cleanup disconnect threw: $e');
+      }
+    } else {
+      AppLogger.i('TUNNEL', 'syncState → engine is $stage, nothing to stop');
+    }
+    _emit(VpnTunnelStatus.disconnected);
+    return false;
+  }
+
+  /// True only for stages that imply a running OpenVPN process.
+  static bool _needsCleanup(VPNStage stage, String rawLower) {
+    switch (stage) {
+      case VPNStage.connected:
+      case VPNStage.disconnected:
+      case VPNStage.disconnecting:
+      case VPNStage.exiting:
+      case VPNStage.denied:
+      case VPNStage.error:
+        return false;
+      case VPNStage.unknown:
+        // An internally-retrying engine is alive; idle/dead signals
+        // (noprocess, no_connection, auth_failed aftermath) are not.
+        return rawLower.contains('reconnect') ||
+            rawLower.contains('add_routes');
+      default:
+        // Mid-handshake stages (tcp/udp_connect, resolve, authenticating,
+        // get_config, assign_ip, ...) prove the service started.
+        return true;
+    }
   }
 
   void _emit(VpnTunnelStatus status) {

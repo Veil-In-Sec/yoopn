@@ -3,7 +3,7 @@ import 'package:yoopn/core/utils/app_logger.dart';
 
 /// Global observer — logs EVERY Bloc/Cubit lifecycle point automatically.
 ///
-/// Covers: SplashBloc, AuthBloc, VpnBloc, SpeedTestCubit.
+/// Covers: SplashBloc, AuthBloc, VpnBloc.
 /// Register once in `main()`: `Bloc.observer = AppBlocObserver();`
 class AppBlocObserver extends BlocObserver {
   String _short(Object? value) => AppLogger.short(value, 300);

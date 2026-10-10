@@ -6,7 +6,6 @@ import 'package:get_it/get_it.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/core/utils/dio_logger_interceptor.dart';
-import 'package:yoopn/features/dashboard/data/datasources/speed_test_data_source.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_data_source.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_gate_remote_data_source.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_local_data_source.dart';
@@ -15,7 +14,6 @@ import 'package:yoopn/features/dashboard/data/tunnel/openvpn_tunnel.dart';
 import 'package:yoopn/features/dashboard/data/tunnel/vpn_tunnel.dart';
 import 'package:yoopn/features/dashboard/domain/repositories/vpn_repository.dart';
 import 'package:yoopn/features/dashboard/domain/usecases/dashboard_use_cases.dart';
-import 'package:yoopn/features/dashboard/presentation/bloc/speed_test_cubit.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
 import 'package:yoopn/features/auth/data/datasources/auth_remote_data_source.dart';
 import 'package:yoopn/features/auth/data/repositories/auth_repository_impl.dart';
@@ -57,9 +55,9 @@ Future<void> _factory_registry() async {
     () {
       final dio = Dio(
         BaseOptions(
-          connectTimeout: const Duration(seconds: 15),
+          connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 15),
-          sendTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 10),
           responseType: ResponseType.plain,
         ),
       );
@@ -122,10 +120,4 @@ Future<void> _factory_registry() async {
     () => DashboardUseCases.fromRepository(sl<VpnRepository>()),
   );
   sl.registerFactory<VpnBloc>(() => VpnBloc(useCases: sl<DashboardUseCases>()));
-  sl.registerLazySingleton<SpeedTestDataSource>(
-    () => LiveSpeedTestDataSource(dio: sl<Dio>()),
-  );
-  sl.registerFactory<SpeedTestCubit>(
-    () => SpeedTestCubit(dataSource: sl<SpeedTestDataSource>()),
-  );
 }

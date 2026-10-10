@@ -46,8 +46,6 @@ bool _isBenign(Object error) {
 void main(List<String> args) async {
   Bloc.observer = AppBlocObserver();
   AppLogger.i('APP', 'main() start args=$args');
-  // Production crash pipeline: uncaught sync + async errors land in the
-  // Supabase `crash_reports` table (see supabase/README.md).
   FlutterError.onError = (details) {
     final error = details.exception;
     if (_isBenign(error)) return;

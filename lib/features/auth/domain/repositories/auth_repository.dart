@@ -21,6 +21,12 @@ abstract class AuthRepository {
     required String otp,
   });
 
+  Future<AuthUserEntity?> updateEmail({required String email});
+
+  Future<AuthUserEntity?> updatePassword({required String password});
+
+  Future<AuthUserEntity?> updateDisplayName({required String displayName});
+
   Future<void> signOut();
 
   Session? get currentSession;

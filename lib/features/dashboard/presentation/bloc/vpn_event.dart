@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 
 @immutable
 sealed class VpnEvent {
@@ -29,4 +30,26 @@ final class VpnConnectionDetailChanged extends VpnEvent {
   const VpnConnectionDetailChanged(this.detail);
 
   final String detail;
+}
+
+/// Reconcile with the OS tunnel on entry (e.g. after a process restart).
+/// Adopts a still-live tunnel as connected; silent when idle.
+final class VpnTunnelSyncRequested extends VpnEvent {
+  const VpnTunnelSyncRequested();
+}
+
+/// Internal: a refresh that exceeded the foreground budget finished.
+/// Carries the fresh list so the UI updates without another fetch.
+final class VpnServersBackgroundRefreshed extends VpnEvent {
+  const VpnServersBackgroundRefreshed(this.servers);
+
+  final List<VpnServer> servers;
+}
+
+/// Internal: a background refresh failed. Only downgrades the UI when
+/// there is still nothing usable to show.
+final class VpnServersBackgroundFailed extends VpnEvent {
+  const VpnServersBackgroundFailed(this.error);
+
+  final Object error;
 }

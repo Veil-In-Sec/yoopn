@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:yoopn/core/telemetry/supabase_telemetry.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
+import 'package:yoopn/features/auth/presentation/helper/friendly_auth_error.dart';
 import 'package:yoopn/core/utils/app_validators.dart';
 import 'package:yoopn/core/utils/internet_connections.dart';
 import 'package:yoopn/features/auth/data/datasources/auth_remote_data_source.dart';
@@ -36,6 +37,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthGoogleSubmitted>(_onGoogleSubmitted);
     on<AuthSessionChanged>(_onSessionChanged);
     on<AuthSignOutSubmitted>(_onSignOutSubmitted);
+    on<AuthEmailUpdateSubmitted>(_onEmailUpdateSubmitted);
+    on<AuthPasswordUpdateSubmitted>(_onPasswordUpdateSubmitted);
+    on<AuthDisplayNameUpdateSubmitted>(_onDisplayNameUpdateSubmitted);
 
     _authSubscription = _repository.onAuthStateChange.listen((data) {
       AppLogger.i('AUTH', 'supabase event=${data.event} hasSession=${data.session != null}');
@@ -65,11 +69,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   void _onSessionChanged(AuthSessionChanged event, Emitter<AuthState> emit) {
     if (event.session != null) {
       AppLogger.i('AUTH', 'session changed → success user=${event.session!.user.email}');
-      final supabaseUser = event.session!.user;
-      final userEntity = AuthUserModel(
-        id: supabaseUser.id.hashCode,
-        email: supabaseUser.email ?? '',
-      ).toEntity();
+      final userEntity =
+          AuthUserModel.fromSupabaseUser(event.session!.user).toEntity();
 
       emit(
         state.copyWith(
@@ -241,7 +242,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             state.copyWith(
               status: AuthStatus.failure,
               loadingAction: AuthLoadingAction.none,
-              errorMsg: signUpError.message,
+              errorMsg: friendlyAuthError(signUpError),
             ),
           );
           return;
@@ -250,7 +251,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             state.copyWith(
               status: AuthStatus.failure,
               loadingAction: AuthLoadingAction.none,
-              errorMsg: signUpError.toString(),
+              errorMsg: friendlyAuthError(signUpError),
             ),
           );
           return;
@@ -267,7 +268,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.failure,
           loadingAction: AuthLoadingAction.none,
-          errorMsg: e.message,
+          errorMsg: friendlyAuthError(e),
         ),
       );
       return;
@@ -277,7 +278,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.failure,
           loadingAction: AuthLoadingAction.none,
-          errorMsg: e.toString(),
+          errorMsg: friendlyAuthError(e),
         ),
       );
       return;
@@ -359,7 +360,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.failure,
           loadingAction: AuthLoadingAction.none,
-          errorMsg: e.message,
+          errorMsg: friendlyAuthError(e),
         ),
       );
     } catch (e, st) {
@@ -368,7 +369,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.failure,
           loadingAction: AuthLoadingAction.none,
-          errorMsg: e.toString(),
+          errorMsg: friendlyAuthError(e),
         ),
       );
     }
@@ -421,7 +422,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.failure,
           loadingAction: AuthLoadingAction.none,
-          errorMsg: e.message,
+          errorMsg: friendlyAuthError(e),
         ),
       );
     } catch (e, st) {
@@ -430,7 +431,238 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.failure,
           loadingAction: AuthLoadingAction.none,
-          errorMsg: e.toString(),
+          errorMsg: friendlyAuthError(e),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onEmailUpdateSubmitted(
+    AuthEmailUpdateSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
+    final email = event.email.trim();
+    AppLogger.i('AUTH', 'email update → ${AppLogger.maskEmail(email)}');
+    final validationError = AppValidators.validateEmail(email);
+    if (validationError != null) {
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: validationError,
+        ),
+      );
+      return;
+    }
+    emit(
+      state.copyWith(
+        status: AuthStatus.loading,
+        loadingAction: AuthLoadingAction.account,
+        errorMsg: null,
+        message: null,
+      ),
+    );
+    if (!await InternetUtils.isConnected()) {
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: 'Please connect to the internet!',
+        ),
+      );
+      return;
+    }
+    try {
+      final updated = await _authUseCases.updateEmail(email: email);
+      if (updated == null) {
+        emit(
+          state.copyWith(
+            status: AuthStatus.failure,
+            loadingAction: AuthLoadingAction.none,
+            errorMsg: 'Could not update email. Please try again.',
+          ),
+        );
+        return;
+      }
+      AppLogger.i('AUTH', 'email update ok, confirmation sent');
+      emit(
+        state.copyWith(
+          status: AuthStatus.success,
+          loadingAction: AuthLoadingAction.none,
+          user: updated,
+          message: 'Verification link sent to ${AppLogger.maskEmail(email)}'
+              ' — confirm there to complete the change.',
+        ),
+      );
+    } on supabase.AuthException catch (e) {
+      AppLogger.w('AUTH', 'email update AuthException: ${e.message}');
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: friendlyAuthError(e),
+        ),
+      );
+    } catch (e, st) {
+      AppLogger.e('AUTH', 'email update failed', e, st);
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: friendlyAuthError(e),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onPasswordUpdateSubmitted(
+    AuthPasswordUpdateSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
+    AppLogger.i('AUTH', 'password update requested');
+    final password = event.password.trim();
+    if (password.length < 6) {
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: 'Password must be at least 6 characters',
+        ),
+      );
+      return;
+    }
+    emit(
+      state.copyWith(
+        status: AuthStatus.loading,
+        loadingAction: AuthLoadingAction.account,
+        errorMsg: null,
+        message: null,
+      ),
+    );
+    if (!await InternetUtils.isConnected()) {
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: 'Please connect to the internet!',
+        ),
+      );
+      return;
+    }
+    try {
+      final updated = await _authUseCases.updatePassword(password: password);
+      if (updated == null) {
+        emit(
+          state.copyWith(
+            status: AuthStatus.failure,
+            loadingAction: AuthLoadingAction.none,
+            errorMsg: 'Could not update password. Please try again.',
+          ),
+        );
+        return;
+      }
+      AppLogger.i('AUTH', 'password update ok');
+      emit(
+        state.copyWith(
+          status: AuthStatus.success,
+          loadingAction: AuthLoadingAction.none,
+          user: updated,
+          message: 'Password updated successfully.',
+        ),
+      );
+    } on supabase.AuthException catch (e) {
+      AppLogger.w('AUTH', 'password update AuthException: ${e.message}');
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: friendlyAuthError(e),
+        ),
+      );
+    } catch (e, st) {
+      AppLogger.e('AUTH', 'password update failed', e, st);
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: friendlyAuthError(e),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onDisplayNameUpdateSubmitted(
+    AuthDisplayNameUpdateSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
+    final displayName = event.displayName.trim();
+    AppLogger.i('AUTH', 'display name update requested');
+    if (displayName.length < 2) {
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: 'Name must be at least 2 characters',
+        ),
+      );
+      return;
+    }
+    emit(
+      state.copyWith(
+        status: AuthStatus.loading,
+        loadingAction: AuthLoadingAction.account,
+        errorMsg: null,
+        message: null,
+      ),
+    );
+    if (!await InternetUtils.isConnected()) {
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: 'Please connect to the internet!',
+        ),
+      );
+      return;
+    }
+    try {
+      final updated =
+          await _authUseCases.updateDisplayName(displayName: displayName);
+      if (updated == null) {
+        emit(
+          state.copyWith(
+            status: AuthStatus.failure,
+            loadingAction: AuthLoadingAction.none,
+            errorMsg: 'Could not update name. Please try again.',
+          ),
+        );
+        return;
+      }
+      AppLogger.i('AUTH', 'display name update ok');
+      emit(
+        state.copyWith(
+          status: AuthStatus.success,
+          loadingAction: AuthLoadingAction.none,
+          user: updated,
+          message: 'Name updated successfully.',
+        ),
+      );
+    } on supabase.AuthException catch (e) {
+      AppLogger.w('AUTH', 'display name update AuthException: ${e.message}');
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: friendlyAuthError(e),
+        ),
+      );
+    } catch (e, st) {
+      AppLogger.e('AUTH', 'display name update failed', e, st);
+      emit(
+        state.copyWith(
+          status: AuthStatus.failure,
+          loadingAction: AuthLoadingAction.none,
+          errorMsg: friendlyAuthError(e),
         ),
       );
     }
@@ -439,8 +671,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onSignOutSubmitted(
     AuthSignOutSubmitted event,
     Emitter<AuthState> emit,
-  ) async {
-    AppLogger.i('AUTH', 'sign-out requested');
+  ) async {    AppLogger.i('AUTH', 'sign-out requested');
     emit(
       state.copyWith(
         status: AuthStatus.loading,
@@ -463,7 +694,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         state.copyWith(
           status: AuthStatus.failure,
           loadingAction: AuthLoadingAction.none,
-          errorMsg: e.toString(),
+          errorMsg: friendlyAuthError(e),
         ),
       );
     }

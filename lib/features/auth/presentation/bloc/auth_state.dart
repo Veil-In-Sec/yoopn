@@ -2,7 +2,7 @@ part of 'auth_bloc.dart';
 
 enum AuthStatus { initial, loading, emailSubmitted, otpSent, success, failure }
 
-enum AuthLoadingAction { none, email, google, password, otp }
+enum AuthLoadingAction { none, email, google, password, otp, account }
 
 final class AuthState extends Equatable {
   final AuthStatus status;

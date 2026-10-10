@@ -44,6 +44,12 @@ class _FakeVpnRepository implements VpnRepository {
 
   @override
   Stream<String> get connectionDetailStream => const Stream.empty();
+
+  @override
+  String get lastConnectionDetail => '';
+
+  @override
+  Future<bool> syncTunnelState() async => false;
 }
 
 void main() {

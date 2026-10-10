@@ -6,6 +6,9 @@ import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/auth/presentation/view/auth_screen.dart';
 import 'package:yoopn/features/auth/presentation/view/password_screen.dart';
 import 'package:yoopn/features/dashboard/presentation/view/dashboard_screen.dart';
+import 'package:yoopn/features/dashboard/presentation/view/screens/info_screen.dart';
+import 'package:yoopn/features/dashboard/presentation/view/screens/menu_screen.dart';
+import 'package:yoopn/features/dashboard/presentation/view/screens/profile_screen.dart';
 import 'package:yoopn/features/splash/presentation/view/splash_screen.dart';
 
 /// Returns the current session without crashing when Supabase is not
@@ -29,11 +32,18 @@ final GoRouter appRouter = GoRouter(
     final session = _currentSession();
     final loggedIn = session != null;
     final goingHome = location == AppPages.home;
+    final goingPrivate = goingHome ||
+        location == AppPages.profile ||
+        location == AppPages.menu ||
+        location == AppPages.terms ||
+        location == AppPages.safety ||
+        location == AppPages.disclaimer;
     final goingAuth =
         location == AppPages.auth || location == AppPages.password;
 
-    // Unauthenticated users may not enter the dashboard.
-    if (!loggedIn && goingHome) {
+    // Unauthenticated users may not enter the dashboard, profile, menu or
+    // document pages.
+    if (!loggedIn && goingPrivate) {
       AppLogger.i('ROUTE', 'guard: guest → $location blocked, redirect ${AppPages.auth}');
       return AppPages.auth;
     }
@@ -54,6 +64,40 @@ final GoRouter appRouter = GoRouter(
       path: AppPages.home,
       name: AppPages.home,
       builder: (context, state) => const DashboardScreen(),
+    ),
+    GoRoute(
+      path: AppPages.profile,
+      name: AppPages.profile,
+      builder: (context, state) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: AppPages.menu,
+      name: AppPages.menu,
+      builder: (context, state) => const MenuScreen(),
+    ),
+    GoRoute(
+      path: AppPages.terms,
+      name: AppPages.terms,
+      builder: (context, state) => const InfoScreen(
+        title: 'Terms & Conditions',
+        sections: termsSections,
+      ),
+    ),
+    GoRoute(
+      path: AppPages.safety,
+      name: AppPages.safety,
+      builder: (context, state) => const InfoScreen(
+        title: 'Safety',
+        sections: safetySections,
+      ),
+    ),
+    GoRoute(
+      path: AppPages.disclaimer,
+      name: AppPages.disclaimer,
+      builder: (context, state) => const InfoScreen(
+        title: 'Disclaimer',
+        sections: disclaimerSections,
+      ),
     ),
     GoRoute(
       path: AppPages.auth,

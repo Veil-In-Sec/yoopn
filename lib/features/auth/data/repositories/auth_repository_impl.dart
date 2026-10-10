@@ -62,6 +62,29 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<AuthUserEntity?> updateEmail({required String email}) async {
+    AppLogger.d('AUTH', 'repo.updateEmail email=${AppLogger.maskEmail(email)}');
+    final model = await remoteDataSource.updateEmail(email);
+    return model?.toEntity();
+  }
+
+  @override
+  Future<AuthUserEntity?> updatePassword({required String password}) async {
+    AppLogger.d('AUTH', 'repo.updatePassword');
+    final model = await remoteDataSource.updatePassword(password);
+    return model?.toEntity();
+  }
+
+  @override
+  Future<AuthUserEntity?> updateDisplayName({
+    required String displayName,
+  }) async {
+    AppLogger.d('AUTH', 'repo.updateDisplayName');
+    final model = await remoteDataSource.updateDisplayName(displayName);
+    return model?.toEntity();
+  }
+
+  @override
   Future<void> signOut() async {
     AppLogger.i('AUTH', 'repo.signOut');
     await remoteDataSource.signOut();

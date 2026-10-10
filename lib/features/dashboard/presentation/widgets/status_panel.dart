@@ -36,7 +36,7 @@ class StatusPanel extends StatelessWidget {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Small state dot + label: the only "badge" in the layout.
+            // State badge, directly under the toggle button.
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -64,23 +64,28 @@ class StatusPanel extends StatelessWidget {
             ),
             SizedBox(height: 10.h),
             // Reserve two lines so switching between status/subtitle never
-            // nudges the power button.
+            // nudges the toggle button.
             SizedBox(
               height: 34.h * 2,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    status.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 26.sp,
-                      height: 1.15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
+                  // While connected the headline itself is the live
+                  // session timer ("Connected for 00:12:34").
+                  if (connected && since != null)
+                    _ConnectedTimerTitle(since: since)
+                  else
+                    Text(
+                      status.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 26.sp,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
                   SizedBox(height: 4.h),
                   Text(
                     supporting,
@@ -94,10 +99,6 @@ class StatusPanel extends StatelessWidget {
                 ],
               ),
             ),
-            if (connected && since != null) ...[
-              SizedBox(height: 6.h),
-              _SessionTimer(since: since),
-            ],
             if (connecting) ...[
               SizedBox(height: 4.h),
               _CancelLink(),
@@ -124,17 +125,18 @@ class _Dot extends StatelessWidget {
   }
 }
 
-/// Ticks every second while connected, showing session duration.
-class _SessionTimer extends StatefulWidget {
-  const _SessionTimer({required this.since});
+/// Headline replacement while connected: ticks every second showing
+/// "Connected for HH:MM:SS".
+class _ConnectedTimerTitle extends StatefulWidget {
+  const _ConnectedTimerTitle({required this.since});
 
   final DateTime since;
 
   @override
-  State<_SessionTimer> createState() => _SessionTimerState();
+  State<_ConnectedTimerTitle> createState() => _ConnectedTimerTitleState();
 }
 
-class _SessionTimerState extends State<_SessionTimer> {
+class _ConnectedTimerTitleState extends State<_ConnectedTimerTitle> {
   Timer? _ticker;
 
   @override
@@ -159,10 +161,13 @@ class _SessionTimerState extends State<_SessionTimer> {
     final s = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
     return Text(
       'Connected for $h:$m:$s',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        fontSize: 12.sp,
-        fontWeight: FontWeight.w600,
-        color: AppColors.success,
+        fontSize: 26.sp,
+        height: 1.15,
+        fontWeight: FontWeight.w800,
+        color: AppColors.textPrimary,
       ),
     );
   }

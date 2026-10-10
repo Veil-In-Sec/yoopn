@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yoopn/features/dashboard/data/datasources/speed_test_data_source.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_local_data_source.dart';
 import 'package:yoopn/features/dashboard/data/models/vpn_server_model.dart';
 
@@ -32,15 +31,5 @@ void main() {
 
     await local.clear();
     expect(await local.loadCachedServers(), isEmpty);
-  });
-
-  test('speed mbps helper converts bytes/time correctly', () {
-    // 10 MB in 8 s -> 10 Mbps.
-    expect(
-      LiveSpeedTestDataSource.mbps(10 * 1024 * 1024, 8 * 1000000),
-      closeTo(10.48576, 0.001),
-    );
-    expect(LiveSpeedTestDataSource.mbps(0, 1000), 0);
-    expect(LiveSpeedTestDataSource.mbps(1000, 0), 0);
   });
 }

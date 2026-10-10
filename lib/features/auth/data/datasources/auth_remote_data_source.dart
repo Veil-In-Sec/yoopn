@@ -11,6 +11,9 @@ abstract class AuthRemoteDataSource {
   Future<bool> signInWithGoogle();
   Future<void> signInWithOtp(String email);
   Future<AuthUserModel?> verifyOtp(String email, String otp);
+  Future<AuthUserModel?> updateEmail(String email);
+  Future<AuthUserModel?> updatePassword(String password);
+  Future<AuthUserModel?> updateDisplayName(String displayName);
   Future<void> signOut();
   Session? get currentSession;
   Stream<AuthState> get onAuthStateChange;
@@ -34,10 +37,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
       AppLogger.i('AUTH', 'remote.signInWithPassword ok user=${response.user?.email} session=${response.session != null}');
       if (response.user != null) {
-        return AuthUserModel(
-          id: response.user!.id.hashCode,
-          email: response.user!.email ?? '',
-        );
+        return AuthUserModel.fromSupabaseUser(response.user!);
       }
       AppLogger.w('AUTH', 'remote.signInWithPassword null user');
       return null;
@@ -59,10 +59,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
       AppLogger.i('AUTH', 'remote.signUp ok user=${response.user?.email} session=${response.session != null}');
       if (response.user != null) {
-        return AuthUserModel(
-          id: response.user!.id.hashCode,
-          email: response.user!.email ?? '',
-        );
+        return AuthUserModel.fromSupabaseUser(response.user!);
       }
       AppLogger.w('AUTH', 'remote.signUp null user (email confirmation pending?)');
       return null;
@@ -115,14 +112,67 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
       AppLogger.i('AUTH', 'remote.verifyOtp ok user=${response.user?.email}');
       if (response.user != null) {
-        return AuthUserModel(
-          id: response.user!.id.hashCode,
-          email: response.user!.email ?? '',
-        );
+        return AuthUserModel.fromSupabaseUser(response.user!);
       }
       return null;
     } catch (e, st) {
       AppLogger.e('AUTH', 'remote.verifyOtp failed', e, st);
+      rethrow;
+    }
+  }
+
+  @override
+  Future<AuthUserModel?> updateEmail(String email) async {
+    final masked = AppLogger.maskEmail(email);
+    AppLogger.i('AUTH', 'remote.updateEmail email=$masked');
+    try {
+      // Sends the confirmation link to the NEW address; the session email
+      // only changes after the user confirms it there.
+      final response = await _supabaseClient.auth.updateUser(
+        UserAttributes(email: email.trim()),
+      );
+      AppLogger.i('AUTH', 'remote.updateEmail ok, confirmation sent');
+      return response.user == null
+          ? null
+          : AuthUserModel.fromSupabaseUser(response.user!);
+    } catch (e, st) {
+      AppLogger.e('AUTH', 'remote.updateEmail failed email=$masked', e, st);
+      rethrow;
+    }
+  }
+
+  @override
+  Future<AuthUserModel?> updatePassword(String password) async {
+    AppLogger.i('AUTH', 'remote.updatePassword');
+    try {
+      final response = await _supabaseClient.auth.updateUser(
+        UserAttributes(password: password.trim()),
+      );
+      AppLogger.i('AUTH', 'remote.updatePassword ok');
+      return response.user == null
+          ? null
+          : AuthUserModel.fromSupabaseUser(response.user!);
+    } catch (e, st) {
+      AppLogger.e('AUTH', 'remote.updatePassword failed', e, st);
+      rethrow;
+    }
+  }
+
+  @override
+  Future<AuthUserModel?> updateDisplayName(String displayName) async {
+    AppLogger.i('AUTH', 'remote.updateDisplayName');
+    try {
+      final response = await _supabaseClient.auth.updateUser(
+        UserAttributes(
+          data: {'full_name': displayName.trim(), 'display_name': displayName.trim()},
+        ),
+      );
+      AppLogger.i('AUTH', 'remote.updateDisplayName ok');
+      return response.user == null
+          ? null
+          : AuthUserModel.fromSupabaseUser(response.user!);
+    } catch (e, st) {
+      AppLogger.e('AUTH', 'remote.updateDisplayName failed', e, st);
       rethrow;
     }
   }

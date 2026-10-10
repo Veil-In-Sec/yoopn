@@ -9,53 +9,14 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/vpn_status.dart';
 
-/// The single focal point of the home screen: one large power button, like
-/// 1.1.1.1. Outline when idle, filled orange when protected, with a breathing
-/// halo while a connection is being established.
-class ConnectButton extends StatefulWidget {
+/// The single focal point of the home screen: a neon on/off toggle switch.
+/// Thumb left = standby, thumb right = protected. Same tap, haptics and
+/// semantics contract as before — only the visuals changed.
+class ConnectButton extends StatelessWidget {
   const ConnectButton({super.key});
 
   @override
-  State<ConnectButton> createState() => _ConnectButtonState();
-}
-
-class _ConnectButtonState extends State<ConnectButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1800),
-  );
-  late final Animation<double> _scale = Tween<double>(
-    begin: 1.0,
-    end: 1.22,
-  ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeOut));
-  late final Animation<double> _fade = Tween<double>(
-    begin: 0.35,
-    end: 0.0,
-  ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeOut));
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  void _syncAnimation(VpnStatus status) {
-    if (status == VpnStatus.disconnected) {
-      _pulse
-        ..stop()
-        ..value = 0;
-    } else if (!_pulse.isAnimating) {
-      _pulse.repeat();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    // 1.1.1.1 uses a dominant circle. Room is reserved for the pulse ring so
-    // neighbours never move when it expands.
-    final diameter = 210.r;
-
     return BlocConsumer<VpnBloc, VpnState>(
       listenWhen: (prev, curr) =>
           prev.status != curr.status || prev.errorMessage != curr.errorMessage,
@@ -76,8 +37,6 @@ class _ConnectButtonState extends State<ConnectButton>
               ),
             );
         }
-        // Driven here so no widget rebuilds per animation frame.
-        _syncAnimation(state.status);
       },
       builder: (context, state) {
         final status = state.status;
@@ -85,93 +44,134 @@ class _ConnectButtonState extends State<ConnectButton>
         final busy = status == VpnStatus.connecting;
 
         return RepaintBoundary(
-          child: SizedBox(
-            width: diameter * 1.35,
-            height: diameter * 1.35,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Breathing halo — repaint only.
-                FadeTransition(
-                  opacity: _fade,
-                  child: ScaleTransition(
-                    scale: _scale,
-                    child: Container(
-                      width: diameter,
-                      height: diameter,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                      ),
-                    ),
+          child: Semantics(
+            button: true,
+            toggled: connected,
+            label: connected ? 'Disconnect VPN' : 'Connect VPN',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                AppLogger.i('UI', 'ConnectButton tapped → VpnToggled');
+                HapticFeedback.mediumImpact();
+                context.read<VpnBloc>().add(const VpnToggled());
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                width: 160.w,
+                height: 58.h,
+                padding: EdgeInsets.symmetric(horizontal: 5.w),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(34.r),
+                  gradient: connected
+                      ? const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            AppColors.primaryLight,
+                            AppColors.primary,
+                          ],
+                        )
+                      : null,
+                  color: connected ? null : AppColors.surface,
+                  // Neon outline only — no outer glow.
+                  border: Border.all(
+                    color: connected
+                        ? AppColors.onPrimary.withValues(alpha: 0.9)
+                        : AppColors.primary,
+                    width: 2,
                   ),
                 ),
-                Semantics(
-                  button: true,
-                  label: connected ? 'Disconnect VPN' : 'Connect VPN',
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      AppLogger.i('UI', 'ConnectButton tapped → VpnToggled');
-                      HapticFeedback.mediumImpact();
-                      context.read<VpnBloc>().add(const VpnToggled());
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 320),
-                      curve: Curves.easeOutCubic,
-                      width: diameter,
-                      height: diameter,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: connected
-                            ? const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  AppColors.primaryLight,
-                                  AppColors.primary,
-                                ],
-                              )
-                            : null,
-                        color: connected ? null : AppColors.surface,
-                        border: Border.all(
-                          color: connected || busy
-                              ? Colors.transparent
-                              : AppColors.border,
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(
-                              alpha: connected ? 0.38 : busy ? 0.18 : 0.06,
-                            ),
-                            blurRadius: connected ? 40 : busy ? 24 : 14,
-                            offset: Offset(0, connected ? 14 : 8),
-                          ),
-                        ],
-                      ),
-                      child: busy
-                          // Determinant progress ring: clearer than the old
-                          // static icon while the handshake is in flight.
-                          ? SizedBox(
-                              width: 54.r,
-                              height: 54.r,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 4,
-                                color: AppColors.primary,
-                              ),
-                            )
-                          : Icon(
-                              Icons.power_settings_new_rounded,
-                              size: 76.r,
+                child: Stack(
+                  children: [
+                    // ON/OFF captions under the sliding thumb.
+                    Positioned.fill(
+                      child: Row(
+                        children: [
+                          SizedBox(width: 12.w),
+                          Text(
+                            'OFF',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w800,
                               color: connected
                                   ? AppColors.onPrimary
+                                      .withValues(alpha: 0.65)
                                   : AppColors.primary,
                             ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            'ON',
+                            style: TextStyle(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w800,
+                              color: connected
+                                  ? AppColors.onPrimary
+                                  : AppColors.textHint,
+                            ),
+                          ),
+                          SizedBox(width: 12.w),
+                        ],
+                      ),
                     ),
-                  ),
+                    AnimatedAlign(
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOutCubic,
+                      alignment: connected
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        width: 48.h,
+                        height: 48.h,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: connected
+                              ? AppColors.onPrimary
+                              : AppColors.surface,
+                          border: connected
+                              ? null
+                              : Border.all(
+                                  color: AppColors.primary.withValues(
+                                    alpha: busy ? 0.7 : 0.45,
+                                  ),
+                                  width: 1.5,
+                                ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: connected ? 0.22 : 0.1,
+                              ),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: busy
+                            ? Center(
+                                child: SizedBox(
+                                  width: 20.r,
+                                  height: 20.r,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: connected
+                                        ? AppColors.onPrimary
+                                        : AppColors.primary,
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                Icons.power_settings_new_rounded,
+                                size: 24.r,
+                                color: connected
+                                    ? AppColors.primary
+                                    : AppColors.primary.withValues(alpha: 0.75),
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );

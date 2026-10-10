@@ -4,6 +4,9 @@ import 'sign_in_with_otp.dart';
 import 'sign_in_with_password.dart';
 import 'sign_out.dart';
 import 'sign_up_with_password.dart';
+import 'update_display_name.dart';
+import 'update_email.dart';
+import 'update_password.dart';
 import 'verify_otp.dart';
 
 class AuthUseCases {
@@ -13,6 +16,9 @@ class AuthUseCases {
   final SignInWithOtpUseCase signInWithOtp;
   final VerifyOtpUseCase verifyOtp;
   final SignOutUseCase signOut;
+  final UpdateEmailUseCase updateEmail;
+  final UpdatePasswordUseCase updatePassword;
+  final UpdateDisplayNameUseCase updateDisplayName;
 
   const AuthUseCases({
     required this.signInWithPassword,
@@ -21,6 +27,9 @@ class AuthUseCases {
     required this.signInWithOtp,
     required this.verifyOtp,
     required this.signOut,
+    required this.updateEmail,
+    required this.updatePassword,
+    required this.updateDisplayName,
   });
 
   factory AuthUseCases.fromRepository(AuthRepository repository) {
@@ -31,6 +40,9 @@ class AuthUseCases {
       signInWithOtp: SignInWithOtpUseCase(repository),
       verifyOtp: VerifyOtpUseCase(repository),
       signOut: SignOutUseCase(repository),
+      updateEmail: UpdateEmailUseCase(repository),
+      updatePassword: UpdatePasswordUseCase(repository),
+      updateDisplayName: UpdateDisplayNameUseCase(repository),
     );
   }
 }

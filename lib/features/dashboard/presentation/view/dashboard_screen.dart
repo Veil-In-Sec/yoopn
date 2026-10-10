@@ -8,9 +8,7 @@ import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/view/screens/home_screen.dart';
-import 'package:yoopn/features/dashboard/presentation/view/screens/profile_screen.dart';
-import 'package:yoopn/features/dashboard/presentation/view/screens/speed_test_screen.dart';
-import 'package:yoopn/features/dashboard/presentation/widgets/app_bottom_nav.dart';
+import 'package:yoopn/features/dashboard/presentation/widgets/promo_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -20,28 +18,22 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final ValueNotifier<int> _index = ValueNotifier<int>(0);
-
   @override
   void initState() {
     super.initState();
     AppLogger.d('UI', 'DashboardScreen initState → request servers');
-    // Load the live VPNGate relay list once per dashboard entry.
+    // Load the live VPNGate relay list once per dashboard entry, and
+    // reconcile with a tunnel that may have outlived the app process.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppLogger.d('UI', 'DashboardScreen postFrame → VpnServersRequested');
       if (mounted) context.read<VpnBloc>().add(const VpnServersRequested());
+      if (mounted) context.read<VpnBloc>().add(const VpnTunnelSyncRequested());
     });
   }
 
   @override
-  void dispose() {
-    _index.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    AppLogger.d('UI', 'DashboardScreen build tab=${_index.value}');
+    AppLogger.d('UI', 'DashboardScreen build');
     return BlocListener<AuthBloc, AuthState>(
       listenWhen: (prev, curr) => prev.status != curr.status,
       listener: (context, state) {
@@ -51,26 +43,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           context.pushReplacement(AppPages.auth);
         }
       },
-      child: BlocSelector<AuthBloc, AuthState, String>(
-        selector: (state) => state.user?.email ?? state.email,
-        builder: (context, email) {
-          final screens = [
-            HomeScreen(email: email),
-            const SpeedTestScreen(),
-            const ProfileScreen(),
-          ];
-
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            extendBody: true,
-            body: ValueListenableBuilder<int>(
-              valueListenable: _index,
-              builder: (_, i, _) => IndexedStack(index: i, children: screens),
-            ),
-            bottomNavigationBar: AppBottomNav(index: _index),
-          );
-        },
-      ),
+        child: const Scaffold(
+          backgroundColor: AppColors.background,
+          body: Stack(
+            children: [
+              HomeScreen(),
+              PromoSheet(),
+            ],
+          ),
+        ),
     );
   }
 }

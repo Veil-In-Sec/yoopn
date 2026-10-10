@@ -8,6 +8,10 @@ abstract interface class VpnDataSource {
 
   VpnServer? findServer(String name);
 
+  /// Reconciles with a tunnel that outlived the app process. See
+  /// [VpnTunnel.syncState]. Returns false (never throws) when idle.
+  Future<bool> syncTunnelState();
+
   /// Latest engine sub-stage text ('' when idle).
   String get lastStageText;
 
@@ -33,6 +37,9 @@ class SimulatedVpnDataSource implements VpnDataSource {
   Future<void> disconnect() async {
     AppLogger.d('VPN-DS', 'SimulatedVpnDataSource.disconnect');
   }
+
+  @override
+  Future<bool> syncTunnelState() async => false;
 
   @override
   String get lastStageText => '';

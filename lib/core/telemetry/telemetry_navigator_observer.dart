@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:yoopn/core/telemetry/supabase_telemetry.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 
-/// Emits a `screen_view` analytics event per route and logs navigation.
-///
-/// Wired into `appRouter` (`observers: [TelemetryNavigatorObserver()]`).
 class TelemetryNavigatorObserver extends NavigatorObserver {
   String? _current;
 

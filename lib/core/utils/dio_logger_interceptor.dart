@@ -1,11 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 
-/// Logs every HTTP call made through Dio.
-///
-/// - VPNGate CSV list (`vpngate.net/api/iphone/`)
-/// - Speed-test endpoints (google `generate_204`, cloudflare `__down/__up`)
-/// Bodies are truncated — 10MB downloads log byte counts, not content.
 class DioLoggerInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -33,9 +28,6 @@ class DioLoggerInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    // Timeouts and deliberate cancels (budget cutoffs) are routine control
-    // flow, not crashes: log them quietly without a stack dump so real
-    // failures stay visible in logcat.
     if (err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.sendTimeout ||
         err.type == DioExceptionType.receiveTimeout ||

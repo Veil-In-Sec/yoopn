@@ -23,22 +23,14 @@ class SplashBloc extends Bloc<SplashEvent, SplashState> {
     AppLogger.i('SPLASH', 'AppStarted → checking session');
     emit(state.copyWith(status: SplashStatus.loading));
 
-    // Warm heavy Lottie compositions (auth screens) in a background isolate
-    // while the splash animation plays — parallel, never on the critical path.
     LottieWarmup.warmup();
 
-    // Logo animation window only (was 800ms). Session restore already
-    // completed during Supabase.initialize in main(), so no need to idle.
     await Future.delayed(const Duration(milliseconds: 300));
 
-    // Check if user session is present in Supabase
     Session? session = _supabaseClient.auth.currentSession;
     AppLogger.d('SPLASH', 'first session check: ${session != null ? 'found user=${session.user.email}' : 'null'}');
 
     if (session == null) {
-      // One short retry for a token refresh landing just after init (was
-      // 600ms). The AuthBloc session listener on the splash screen is the
-      // backstop: it routes to home even if this check races.
       await Future.delayed(const Duration(milliseconds: 300));
       session = _supabaseClient.auth.currentSession;
       AppLogger.d('SPLASH', 'retry session check: ${session != null ? 'found' : 'still null'}');

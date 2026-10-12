@@ -22,8 +22,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     AppLogger.d('UI', 'DashboardScreen initState → request servers');
-    // Load the live VPNGate relay list once per dashboard entry, and
-    // reconcile with a tunnel that may have outlived the app process.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppLogger.d('UI', 'DashboardScreen postFrame → VpnServersRequested');
       if (mounted) context.read<VpnBloc>().add(const VpnServersRequested());

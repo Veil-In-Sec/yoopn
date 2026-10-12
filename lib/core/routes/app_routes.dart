@@ -9,10 +9,9 @@ import 'package:yoopn/features/dashboard/presentation/view/dashboard_screen.dart
 import 'package:yoopn/features/dashboard/presentation/view/screens/info_screen.dart';
 import 'package:yoopn/features/dashboard/presentation/view/screens/menu_screen.dart';
 import 'package:yoopn/features/dashboard/presentation/view/screens/profile_screen.dart';
+import 'package:yoopn/features/dashboard/presentation/view/screens/servers_screen.dart';
 import 'package:yoopn/features/splash/presentation/view/splash_screen.dart';
 
-/// Returns the current session without crashing when Supabase is not
-/// initialized yet (e.g. router built before `main()` finishes `_init()`).
 Session? _currentSession() {
   try {
     return Supabase.instance.client.auth.currentSession;
@@ -27,7 +26,6 @@ final GoRouter appRouter = GoRouter(
   redirect: (context, state) {
     final location = state.matchedLocation;
     AppLogger.d('ROUTE', 'redirect check location=$location');
-    // Splash always decides for itself.
     if (location == AppPages.splash) return null;
     final session = _currentSession();
     final loggedIn = session != null;
@@ -35,19 +33,17 @@ final GoRouter appRouter = GoRouter(
     final goingPrivate = goingHome ||
         location == AppPages.profile ||
         location == AppPages.menu ||
+        location == AppPages.servers ||
         location == AppPages.terms ||
         location == AppPages.safety ||
         location == AppPages.disclaimer;
     final goingAuth =
         location == AppPages.auth || location == AppPages.password;
 
-    // Unauthenticated users may not enter the dashboard, profile, menu or
-    // document pages.
     if (!loggedIn && goingPrivate) {
       AppLogger.i('ROUTE', 'guard: guest → $location blocked, redirect ${AppPages.auth}');
       return AppPages.auth;
     }
-    // Authenticated users skip the login screens.
     if (loggedIn && goingAuth) {
       AppLogger.i('ROUTE', 'guard: authed user skips $location → ${AppPages.home}');
       return AppPages.home;
@@ -74,6 +70,11 @@ final GoRouter appRouter = GoRouter(
       path: AppPages.menu,
       name: AppPages.menu,
       builder: (context, state) => const MenuScreen(),
+    ),
+    GoRoute(
+      path: AppPages.servers,
+      name: AppPages.servers,
+      builder: (context, state) => const ServersScreen(),
     ),
     GoRoute(
       path: AppPages.terms,

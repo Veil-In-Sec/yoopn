@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+
 import '../../domain/entities/auth_user_entity.dart';
 
 class AuthUserModel extends AuthUserEntity {
@@ -9,9 +10,6 @@ class AuthUserModel extends AuthUserEntity {
     super.displayName,
   });
 
-  /// Builds from a Supabase user, picking up the OAuth avatar and display
-  /// name when present (Google provides `avatar_url` + `full_name`; some
-  /// providers use `picture` / `display_name` / `name`).
   factory AuthUserModel.fromSupabaseUser(supabase.User user) {
     final meta = user.userMetadata;
     var photoUrl = meta?['avatar_url']?.toString();
@@ -41,14 +39,18 @@ class AuthUserModel extends AuthUserEntity {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'email': email,
-        'photoUrl': photoUrl,
-        'displayName': displayName,
-      };
+    'id': id,
+    'email': email,
+    'photoUrl': photoUrl,
+    'displayName': displayName,
+  };
 
-  AuthUserModel copyWith(
-      {int? id, String? email, String? photoUrl, String? displayName}) {
+  AuthUserModel copyWith({
+    int? id,
+    String? email,
+    String? photoUrl,
+    String? displayName,
+  }) {
     return AuthUserModel(
       id: id ?? this.id,
       email: email ?? this.email,
@@ -58,11 +60,11 @@ class AuthUserModel extends AuthUserEntity {
   }
 
   AuthUserEntity toEntity() => AuthUserEntity(
-        id: id,
-        email: email,
-        photoUrl: photoUrl,
-        displayName: displayName,
-      );
+    id: id,
+    email: email,
+    photoUrl: photoUrl,
+    displayName: displayName,
+  );
 
   factory AuthUserModel.fromEntity(AuthUserEntity entity) {
     return AuthUserModel(

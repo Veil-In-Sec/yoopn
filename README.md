@@ -68,7 +68,7 @@ release build falls back to debug keys and logs a warning.
 
 ```sh
 flutter analyze          # must be clean
-flutter test             # 29 tests
+flutter test             # 50 tests
 ./supabase/probe.sh      # telemetry inserts return HTTP 201
 ```
 

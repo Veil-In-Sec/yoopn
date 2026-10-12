@@ -5,12 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
-import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/sign_out_action.dart';
 
-/// Hamburger menu page: plan switcher, account setup, logout, terms,
-/// safety, disclaimer — with a developer credit footer.
 class MenuScreen extends StatelessWidget {
   const MenuScreen({super.key});
 
@@ -41,7 +40,7 @@ class MenuScreen extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  SizedBox(width: 4.w),
+                  Spacing.horizontal(4),
                   Text(
                     'Menu',
                     style: TextStyle(
@@ -69,7 +68,7 @@ class MenuScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  SizedBox(width: 12.w),
+                  Spacing.horizontal(12),
                   Expanded(
                     child: Text(
                       email.isEmpty ? 'User profile' : email,
@@ -91,17 +90,20 @@ class MenuScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: 12.w),
                 children: [
                   _MenuItem(
-                    icon: Icons.workspace_premium_rounded,
-                    label: 'Plan switcher',
-                    trailing: Text(
-                      'Free',
-                      style: TextStyle(
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
+                    icon: Icons.dns_rounded,
+                    label: 'Servers',
+                    trailing: BlocSelector<VpnBloc, VpnState, int>(
+                      selector: (s) => s.servers.length,
+                      builder: (_, count) => Text(
+                        '$count',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ),
-                    onTap: () => _showPlanSheet(context),
+                    onTap: () => context.push(AppPages.servers),
                   ),
                   _MenuItem(
                     icon: Icons.manage_accounts_rounded,
@@ -175,69 +177,6 @@ class MenuScreen extends StatelessWidget {
     );
   }
 
-  void _showPlanSheet(BuildContext context) {
-    AppLogger.i('UI', 'plan switcher opened');
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 24.h),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40.w,
-                  height: 4.h,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(4.r),
-                  ),
-                ),
-              ),
-              SizedBox(height: 12.h),
-              Text(
-                'Choose your plan',
-                style: TextStyle(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 8.h),
-              _PlanRow(
-                title: 'Free',
-                subtitle: 'Standard servers',
-                selected: true,
-                onTap: () => Navigator.of(sheetContext).pop(),
-              ),
-              _PlanRow(
-                title: 'Premium',
-                subtitle: 'Fastest servers, no limits',
-                selected: false,
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  ScaffoldMessenger.of(context)
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(
-                      const SnackBar(
-                        content: Text('Premium plan coming soon'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _MenuItem extends StatelessWidget {
@@ -270,48 +209,6 @@ class _MenuItem extends StatelessWidget {
             Icons.chevron_right_rounded,
             color: AppColors.textHint,
           ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14.r),
-      ),
-      onTap: onTap,
-    );
-  }
-}
-
-class _PlanRow extends StatelessWidget {
-  const _PlanRow({
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14.sp,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(fontSize: 12.sp, color: AppColors.textSecondary),
-      ),
-      trailing: selected
-          ? const Icon(Icons.check_circle_rounded, color: AppColors.primary)
-          : const Icon(
-              Icons.circle_outlined,
-              color: AppColors.textHint,
-            ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14.r),
       ),

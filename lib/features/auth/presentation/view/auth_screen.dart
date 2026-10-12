@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:yoopn/core/widgets/app_snackbar.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -34,7 +35,6 @@ class _AuthScreenState extends State<AuthScreen> {
     AppLogger.d('UI', 'AuthScreen initState');
     startAutoPlay(_timer, _autoPlayInterval, _pageController, _currentPage);
 
-    // Check if already authenticated via background OAuth deep link
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final authBlocState = context.read<AuthBloc>().state;
@@ -82,22 +82,17 @@ class _AuthScreenState extends State<AuthScreen> {
             context.push(AppPages.password);
             break;
           case AuthStatus.otpSent:
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  state.message ?? 'Verification code sent to email',
-                ),
-                backgroundColor: AppColors.primary,
-              ),
+            showAppSnackBar(
+              context,
+              state.message ?? 'Verification code sent to email',
             );
             showOtpDialog(context, state.email);
             break;
           case AuthStatus.failure:
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.errorMsg ?? 'Authentication failed'),
-                backgroundColor: AppColors.error,
-              ),
+            showAppSnackBar(
+              context,
+              state.errorMsg ?? 'Authentication failed',
+              isError: true,
             );
             break;
           case AuthStatus.initial:

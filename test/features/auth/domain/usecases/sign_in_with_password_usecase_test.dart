@@ -38,6 +38,10 @@ class _FakeAuthRepository implements AuthRepository {
   Future<void> signOut() async {}
 
   @override
+  AuthUserEntity mapSessionUser(Session session) =>
+      const AuthUserEntity(id: 7, email: 'user@example.com');
+
+  @override
   Future<AuthUserEntity?> updateEmail({required String email}) async => null;
 
   @override

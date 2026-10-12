@@ -2,18 +2,6 @@ import 'dart:convert';
 
 import '../../domain/entities/vpn_server.dart';
 
-/// VPNGate pipeline: CSV -> JSON -> [VpnServer].
-///
-/// Stage 1 ([csvToJson]): raw `https://www.vpngate.net/api/iphone/` CSV text
-///   becomes a JSON-compatible `List<Map<String, dynamic>>`.
-/// Stage 2 ([serversFromJson]): that JSON becomes typed [VpnServer] objects
-///   which the rest of the app (repository / bloc / UI) consumes.
-/// Stage 3 ([parseCsv]): convenience chaining stage 1 + 2.
-///
-/// CSV columns (15):
-/// HostName,IP,Score,Ping,Speed,CountryLong,CountryShort,NumVpnSessions,
-/// Uptime,TotalUsers,TotalTraffic,LogType,Operator,Message,
-/// OpenVPN_ConfigData_Base64
 class VpnServerModel extends VpnServer {
   const VpnServerModel({
     required super.name,
@@ -30,7 +18,6 @@ class VpnServerModel extends VpnServer {
     super.openVpnConfig = '',
   });
 
-  /// JSON keys produced by [csvToJson] and consumed by [fromJson].
   static const jsonKeys = <String>[
     'hostName',
     'ip',
@@ -51,14 +38,7 @@ class VpnServerModel extends VpnServer {
     'flag',
   ];
 
-  // ------------------------------------------------------------------
-  // Stage 1: CSV -> JSON
-  // ------------------------------------------------------------------
 
-  /// Convert a full VPNGate CSV payload into JSON-compatible maps.
-  ///
-  /// Skips `*`/`#` meta lines, tolerates commas inside Message (col 13)
-  /// by treating the first 13 cols and the last col as fixed.
   static List<Map<String, dynamic>> csvToJson(String csv) {
     final json = <Map<String, dynamic>>[];
     for (final rawLine in const LineSplitter().convert(csv)) {
@@ -71,7 +51,6 @@ class VpnServerModel extends VpnServer {
     return json;
   }
 
-  /// Convert one CSV data line into a JSON map. Null when malformed.
   static Map<String, dynamic>? csvLineToJson(String line) {
     final parts = line.split(',');
     if (parts.length < 15) return null;
@@ -109,8 +88,6 @@ class VpnServerModel extends VpnServer {
       message = parts[13].trim();
       configBase64 = parts[14].trim();
     } else {
-      // Extra commas live inside Message: first 13 cols fixed, last col
-      // fixed, everything between index 13..n-2 is Message.
       hostName = parts[0].trim();
       ip = parts[1].trim();
       scoreRaw = parts[2].trim();
@@ -150,20 +127,14 @@ class VpnServerModel extends VpnServer {
       'operator': operatorName,
       'message': message,
       'openVpnConfig': configBase64,
-      // Derived display fields so JSON alone can render UI.
       'name': displayName,
       'flag': VpnServer.flagFromCountryCode(short),
     };
   }
 
-  /// Encode [csvToJson] output as a JSON string (for caching / tests).
   static String csvToJsonString(String csv) => jsonEncode(csvToJson(csv));
 
-  // ------------------------------------------------------------------
-  // Stage 2: JSON -> typed model (wires the rest of the app)
-  // ------------------------------------------------------------------
 
-  /// Build a typed model from a [csvToJson] map.
   factory VpnServerModel.fromJson(Map<String, dynamic> json) {
     int asInt(Object? v) {
       if (v is int) return v;
@@ -199,7 +170,6 @@ class VpnServerModel extends VpnServer {
     );
   }
 
-  /// Convert JSON lists (e.g. from cache / tests) into sorted servers.
   static List<VpnServer> serversFromJson(List<dynamic> jsonList) {
     final servers = <VpnServer>[];
     for (final item in jsonList) {
@@ -213,22 +183,16 @@ class VpnServerModel extends VpnServer {
     return servers;
   }
 
-  /// Decode a [csvToJsonString] / cached payload back into servers.
   static List<VpnServer> serversFromJsonString(String jsonString) {
     final decoded = jsonDecode(jsonString);
     if (decoded is! List) return [];
     return serversFromJson(decoded);
   }
 
-  // ------------------------------------------------------------------
-  // Stage 3: convenience CSV -> JSON -> servers
-  // ------------------------------------------------------------------
 
-  /// Parse a full CSV payload into servers (CSV -> JSON -> models).
   static List<VpnServer> parseCsv(String csv) =>
       serversFromJson(csvToJson(csv));
 
-  /// Parse one CSV data line directly into a server. Null when malformed.
   static VpnServer? fromCsvLine(String line) {
     final row = csvLineToJson(line);
     if (row == null) return null;

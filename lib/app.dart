@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:yoopn/core/routes/app_routes.dart';
 import 'package:yoopn/core/themes/app_theme.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/core/utils/dependency_injection.dart';
+import 'package:yoopn/core/ads/ad_counter_store.dart';
 import 'package:yoopn/core/utils/notification_permission.dart';
 import 'package:yoopn/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
@@ -20,9 +22,6 @@ class _YooPNAppState extends State<YooPNApp> {
   @override
   void initState() {
     super.initState();
-    // Ask for POST_NOTIFICATIONS after the first frame: the OpenVPN engine
-    // needs it for its foreground-service notification, but the prompt must
-    // never delay splash/first paint. No-op on iOS/desktop.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationPermission.ensureGranted();
     });
@@ -36,6 +35,7 @@ class _YooPNAppState extends State<YooPNApp> {
         BlocProvider(create: (_) => sl<SplashBloc>()..add(const AppStarted())),
         BlocProvider(create: (_) => sl<AuthBloc>()),
         BlocProvider(create: (_) => sl<VpnBloc>()),
+        Provider<AdCounterStore>(create: (_) => sl<AdCounterStore>()),
       ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,

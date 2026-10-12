@@ -4,11 +4,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:yoopn/core/ads/ad_counter_store.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/core/utils/dio_logger_interceptor.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_data_source.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_gate_remote_data_source.dart';
 import 'package:yoopn/features/dashboard/data/datasources/vpn_local_data_source.dart';
+import 'package:yoopn/features/dashboard/data/datasources/vpn_local_memory_data_source.dart';
 import 'package:yoopn/features/dashboard/data/repositories/vpn_repository_impl.dart';
 import 'package:yoopn/features/dashboard/data/tunnel/openvpn_tunnel.dart';
 import 'package:yoopn/features/dashboard/data/tunnel/vpn_tunnel.dart';
@@ -24,13 +26,19 @@ import 'package:yoopn/features/splash/presentation/bloc/splash_bloc.dart';
 
 final GetIt sl = GetIt.instance;
 
-Future<void> init_dependency_injection() async {
+Future<void> initDependencyInjection() async {
+  // Idempotent: hot-restart and tests may call twice; GetIt throws on
+  // duplicate registration.
+  if (sl.isRegistered<SupabaseClient>()) {
+    AppLogger.d('DI', 'already registered — skipping');
+    return;
+  }
   AppLogger.i('DI', 'registering dependencies…');
-  _factory_registry();
+  _registerDependencies();
   AppLogger.i('DI', 'all dependencies registered');
 }
 
-Future<void> _factory_registry() async {
+Future<void> _registerDependencies() async {
   AppLogger.d('DI', 'SupabaseClient → lazySingleton');
   sl.registerLazySingleton<SupabaseClient>(() => Supabase.instance.client);
   sl.registerLazySingleton<AuthRemoteDataSource>(
@@ -66,8 +74,6 @@ Future<void> _factory_registry() async {
       return dio;
     },
   );
-  // Real OpenVPN tunnel on mobile, simulated everywhere else (desktop/web/
-  // tests) so `flutter analyze` and unit tests keep working without a device.
   sl.registerLazySingleton<VpnTunnel>(() {
     if (kIsWeb) {
       AppLogger.d('DI', 'VpnTunnel → Simulated (web)');
@@ -90,8 +96,6 @@ Future<void> _factory_registry() async {
     () => VpnGateRemoteDataSourceImpl(dio: sl<Dio>()),
   );
   sl.registerLazySingleton<VpnLocalDataSource>(() {
-    // sqflite has no Windows/Web support; use the in-memory stand-in there
-    // so desktop runs and widget tests keep working.
     if (kIsWeb) {
       AppLogger.d('DI', 'VpnLocalDataSource → InMemory (web)');
       return InMemoryVpnLocalDataSource();
@@ -120,4 +124,17 @@ Future<void> _factory_registry() async {
     () => DashboardUseCases.fromRepository(sl<VpnRepository>()),
   );
   sl.registerFactory<VpnBloc>(() => VpnBloc(useCases: sl<DashboardUseCases>()));
+  sl.registerLazySingleton<AdCounterStore>(() {
+    if (kIsWeb) return MemoryAdCounterStore();
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return SqfliteAdCounterStore();
+      case TargetPlatform.windows:
+      case TargetPlatform.linux:
+      case TargetPlatform.fuchsia:
+        return MemoryAdCounterStore();
+    }
+  });
 }

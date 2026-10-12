@@ -2,19 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 
-/// Supabase settings resolution, in priority order:
-///
-/// 1. `--dart-define` (use this for release builds so nothing is bundled):
-///    ```sh
-///    flutter build apk --release \
-///      --dart-define=SUPABASE_URL=https://xxx.supabase.co \
-///      --dart-define=SUPABASE_ANON_KEY=sb_publishable_xxx \
-///      --dart-define=REDIRECT_URL=io.supabase.yoopn://login-callback
-///    ```
-/// 2. The `.env` asset (development convenience — see README).
-///
-/// Getters throw a descriptive [StateError] instead of a bare `!` crash when
-/// a value is missing, so misconfiguration is diagnosable from the log.
 class SupabaseConfig {
   SupabaseConfig._();
 
@@ -25,11 +12,8 @@ class SupabaseConfig {
   static bool _loaded = false;
   static String? _source;
 
-  /// Where the active values came from: `dart-define` or `.env`.
   static String get source => _source ?? 'none';
 
-  /// True when values came from the bundled `.env` asset. Warn about this
-  /// in release builds: the key then ships inside the APK.
   static bool get fromBundledAsset => _source == '.env';
 
   static Future<void> load() async {
@@ -92,8 +76,6 @@ class SupabaseConfig {
         _firstNonEmpty([_kRedirect, _env('REDIRECT_URL')]),
       );
 
-  /// `dotenv.env` throws when the asset was never loaded, so treat that as
-  /// "not configured" and let [_require] produce the useful message.
   static String? _env(String key) {
     try {
       return dotenv.env[key];

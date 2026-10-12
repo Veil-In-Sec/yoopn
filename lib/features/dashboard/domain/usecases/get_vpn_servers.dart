@@ -1,4 +1,3 @@
-import 'package:yoopn/core/utils/app_logger.dart';
 import '../entities/vpn_server.dart';
 import '../repositories/vpn_repository.dart';
 
@@ -7,8 +6,6 @@ class GetVpnServersUseCase {
 
   final VpnRepository _repository;
 
-  Future<List<VpnServer>> call({bool forceRefresh = false}) {
-    AppLogger.d('VPN', 'usecase.getServers forceRefresh=$forceRefresh');
-    return _repository.getServers(forceRefresh: forceRefresh);
-  }
+  Future<List<VpnServer>> call({bool forceRefresh = false}) =>
+      _repository.getServers(forceRefresh: forceRefresh);
 }

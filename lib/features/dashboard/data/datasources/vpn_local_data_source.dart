@@ -5,14 +5,6 @@ import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/data/models/vpn_server_model.dart';
 import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 
-/// sqflite offline store for the VPNGate relay list.
-///
-/// Two tables:
-/// - `servers`: one row per relay (hostName PK), full JSON columns.
-/// - `meta`: single row (id=1) with the last successful fetch timestamp.
-///
-/// Tests can inject an already-open [Database] (e.g. in-memory via
-/// sqflite_common_ffi) through [testDatabase].
 abstract interface class VpnLocalDataSource {
   Future<void> cacheServers(List<Map<String, dynamic>> json);
 
@@ -42,12 +34,27 @@ class SqfliteVpnLocalDataSource implements VpnLocalDataSource {
 
   Database? _db;
 
+  /// Memoized open future: concurrent first calls join one openDatabase
+  /// instead of opening twice and leaking the extra handle.
+  Future<Database>? _opening;
+
   Future<Database> _open() async {
     if (testDatabase != null) {
       await _ensureSchema(testDatabase!);
       return testDatabase!;
     }
     if (_db != null) return _db!;
+    final opening = _opening;
+    if (opening != null) return opening;
+    final future = _doOpen();
+    _opening = future;
+    future.then((_) {}, onError: (_) {
+      if (identical(_opening, future)) _opening = null;
+    });
+    return future;
+  }
+
+  Future<Database> _doOpen() async {
     final dir = await getDatabasesPath();
     _db = await openDatabase(
       p.join(dir, dbName),
@@ -166,9 +173,10 @@ CREATE TABLE $tableMeta (
         final q = '%${query.trim().toLowerCase()}%';
         where.write(
           'WHERE lower(name) LIKE ? OR lower(hostName) LIKE ? '
-          'OR ip LIKE ? OR lower(countryShort) LIKE ?',
+          'OR ip LIKE ? OR lower(countryShort) LIKE ? '
+          'OR lower(countryLong) LIKE ?',
         );
-        args.addAll([q, q, '%${query.trim()}%', q]);
+        args.addAll([q, q, '%${query.trim()}%', q, q]);
       }
       final rows = await db.query(
         tableServers,
@@ -189,7 +197,6 @@ CREATE TABLE $tableMeta (
   Future<VpnServer?> loadBestServer() async {
     try {
       final db = await _open();
-      // Prefer reachable relays (ping >= 0), highest score then lowest ping.
       var rows = await db.query(
         tableServers,
         where: 'ping >= 0',
@@ -246,68 +253,5 @@ CREATE TABLE $tableMeta (
     if (v is num) return v.toInt();
     if (v is String) return int.tryParse(v.trim()) ?? fallback;
     return fallback;
-  }
-}
-
-/// In-memory stand-in for widget/unit tests running on desktop where the
-/// sqflite platform channel is unavailable.
-class InMemoryVpnLocalDataSource implements VpnLocalDataSource {
-  List<Map<String, dynamic>> _rows = [];
-  DateTime? _fetchedAt;
-
-  @override
-  Future<void> cacheServers(List<Map<String, dynamic>> json) async {
-    _rows = json.map((e) => Map<String, dynamic>.from(e)).toList();
-    _fetchedAt = DateTime.now();
-  }
-
-  @override
-  Future<List<VpnServer>> loadCachedServers({String? query, int? limit}) async {
-    var servers = VpnServerModel.serversFromJson(await loadCachedJson());
-    if (query != null && query.trim().isNotEmpty) {
-      final q = query.trim().toLowerCase();
-      servers = servers
-          .where(
-            (s) =>
-                s.name.toLowerCase().contains(q) ||
-                s.hostName.toLowerCase().contains(q) ||
-                s.ip.contains(q),
-          )
-          .toList();
-    }
-    if (limit != null && servers.length > limit) {
-      servers = servers.sublist(0, limit);
-    }
-    return servers;
-  }
-
-  @override
-  Future<List<Map<String, dynamic>>> loadCachedJson({
-    String? query,
-    int? limit,
-  }) async =>
-      _rows.map((e) => Map<String, dynamic>.from(e)).toList();
-
-  @override
-  Future<VpnServer?> loadBestServer() async {
-    final servers = await loadCachedServers();
-    if (servers.isEmpty) return null;
-    final reachable = servers.where((s) => s.ping >= 0).toList();
-    final pool = reachable.isEmpty ? servers : reachable;
-    pool.sort((a, b) {
-      final score = b.score.compareTo(a.score);
-      if (score != 0) return score;
-      return a.ping.compareTo(b.ping);
-    });
-    return pool.first;
-  }
-
-  @override
-  Future<DateTime?> lastCachedAt() async => _fetchedAt;
-
-  @override
-  Future<void> clear() async {
-    _rows = [];
-    _fetchedAt = null;
   }
 }

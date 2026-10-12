@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:yoopn/core/widgets/app_snackbar.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:yoopn/core/dimentions/spacings.dart';
+import 'package:yoopn/core/ads/ad_gate.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
@@ -9,12 +12,12 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/vpn_status.dart';
 
-/// The single focal point of the home screen: a neon on/off toggle switch.
-/// Thumb left = standby, thumb right = protected. Same tap, haptics and
-/// semantics contract as before — only the visuals changed.
+/// Serializes taps while the 30s ad gate is open: without this, rapid taps
+/// enqueue two toggles (connect, then instant disconnect).
+bool _gateBusy = false;
+
 class ConnectButton extends StatelessWidget {
   const ConnectButton({super.key});
-
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<VpnBloc, VpnState>(
@@ -27,15 +30,7 @@ class ConnectButton extends StatelessWidget {
           'ConnectButton status=${state.status} err=${state.errorMessage}',
         );
         if (state.errorMessage != null) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                content: Text(state.errorMessage!),
-                backgroundColor: AppColors.error,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+          showAppSnackBar(context, state.errorMessage!, isError: true);
         }
       },
       builder: (context, state) {
@@ -50,10 +45,31 @@ class ConnectButton extends StatelessWidget {
             label: connected ? 'Disconnect VPN' : 'Connect VPN',
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () {
+              onTap: () async {
+                if (_gateBusy) return;
                 AppLogger.i('UI', 'ConnectButton tapped → VpnToggled');
                 HapticFeedback.mediumImpact();
-                context.read<VpnBloc>().add(const VpnToggled());
+                final bloc = context.read<VpnBloc>();
+                if (bloc.state.status == VpnStatus.connecting) {
+                  bloc.add(const VpnToggled());
+                  return;
+                }
+                _gateBusy = true;
+                try {
+                  final expect = bloc.state.status;
+                  final turningOn = expect == VpnStatus.disconnected;
+                  await showAdGate(
+                    context,
+                    title: turningOn ? 'Connecting VPN…' : 'Disconnecting…',
+                  );
+                  if (!context.mounted || bloc.isClosed) return;
+                  // Skip if something else (sign-out, tunnel sync) already
+                  // moved the state during the 30s gate.
+                  if (bloc.state.status != expect) return;
+                  bloc.add(const VpnToggled());
+                } finally {
+                  _gateBusy = false;
+                }
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 260),
@@ -74,7 +90,6 @@ class ConnectButton extends StatelessWidget {
                         )
                       : null,
                   color: connected ? null : AppColors.surface,
-                  // Neon outline only — no outer glow.
                   border: Border.all(
                     color: connected
                         ? AppColors.onPrimary.withValues(alpha: 0.9)
@@ -84,11 +99,10 @@ class ConnectButton extends StatelessWidget {
                 ),
                 child: Stack(
                   children: [
-                    // ON/OFF captions under the sliding thumb.
                     Positioned.fill(
                       child: Row(
                         children: [
-                          SizedBox(width: 12.w),
+                          Spacing.horizontal(12),
                           Text(
                             'OFF',
                             style: TextStyle(
@@ -111,7 +125,7 @@ class ConnectButton extends StatelessWidget {
                                   : AppColors.textHint,
                             ),
                           ),
-                          SizedBox(width: 12.w),
+                          Spacing.horizontal(12),
                         ],
                       ),
                     ),

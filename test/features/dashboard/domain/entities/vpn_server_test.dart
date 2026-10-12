@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 
-/// Base64 of a minimal VPNGate-style .ovpn config.
 const String _validConfigB64 =
     'Y2xpZW50CmRldiB0dW4KcHJvdG8gdWRwCnJlbW90ZSAxLjIuMy40IDExOTQ=';
 

@@ -3,7 +3,6 @@ import 'package:yoopn/core/errors/vpn_failures.dart';
 import 'package:yoopn/features/dashboard/data/tunnel/vpn_tunnel.dart';
 import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 
-/// Base64 of a minimal VPNGate-style .ovpn config.
 const String _validConfigB64 =
     'Y2xpZW50CmRldiB0dW4KcHJvdG8gdWRwCnJlbW90ZSAxLjIuMy40IDExOTQ=';
 
@@ -30,7 +29,6 @@ void main() {
 
     test('connect reports connecting then connected', () async {
       await tunnel.connect(_relay());
-      // BroadcastStream delivers asynchronously; let the microtasks drain.
       await Future<void>.delayed(Duration.zero);
 
       expect(statuses, [

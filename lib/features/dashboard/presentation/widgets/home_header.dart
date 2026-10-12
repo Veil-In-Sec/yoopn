@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 
-/// Home app bar: app name top-left, hamburger menu top-right.
-/// The hamburger opens the menu page (plan, account, logout, documents).
 class HomeHeader extends StatelessWidget {
   const HomeHeader({super.key});
 

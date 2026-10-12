@@ -126,8 +126,6 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     final masked = AppLogger.maskEmail(email);
     AppLogger.i('AUTH', 'remote.updateEmail email=$masked');
     try {
-      // Sends the confirmation link to the NEW address; the session email
-      // only changes after the user confirms it there.
       final response = await _supabaseClient.auth.updateUser(
         UserAttributes(email: email.trim()),
       );

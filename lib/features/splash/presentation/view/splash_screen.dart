@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:yoopn/core/widgets/app_snackbar.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -14,13 +15,6 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/splash/presentation/bloc/splash_bloc.dart';
 
-/// Splash doubles as the prefetch gate: the VPNGate CSV download starts
-/// here, and navigation waits until the list has settled (loaded/failed)
-/// or the safety timeout fires — so Home always opens with servers ready
-/// (or an honest error + Retry), never with a spinner.
-///
-/// Nothing here can hang: the refresh budget settles the foreground in ≤2s,
-/// and [_gateTimeout] caps the wait even if the bloc never answers.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -41,8 +35,6 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     final vpn = context.read<VpnBloc>();
-    // Already settled (warm restart)? Don't wait for an event that already
-    // fired — a listener only runs on *changes*.
     _serversDone = vpn.state.serversStatus == VpnServersStatus.loaded ||
         vpn.state.serversStatus == VpnServersStatus.failure;
     AppLogger.i('UI', 'SplashScreen prefetch servers (settled=$_serversDone)');
@@ -102,14 +94,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
               case SplashStatus.error:
                 AppLogger.e('UI', 'SplashScreen error: ${state.errorMsg}');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(state.errorMsg ?? 'Something went wrong'),
-                    action: SnackBarAction(
-                      label: "Retry",
-                      onPressed: () =>
-                          context.read<SplashBloc>().add(const AppStarted()),
-                    ),
+                showAppSnackBar(
+                  context,
+                  state.errorMsg ?? 'Something went wrong',
+                  isError: true,
+                  action: SnackBarAction(
+                    label: "Retry",
+                    onPressed: () =>
+                        context.read<SplashBloc>().add(const AppStarted()),
                   ),
                 );
                 _resolveRoute(AppPages.auth);

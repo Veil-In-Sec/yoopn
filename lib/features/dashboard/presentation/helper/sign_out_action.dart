@@ -9,8 +9,6 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/vpn_status.dart';
 
-/// Shared sign-out flow (drawer + profile use the same one): confirm,
-/// disconnect the tunnel first, sign out, return to auth.
 Future<void> confirmAndSignOut(BuildContext context) async {
   AppLogger.i('UI', 'sign-out tapped');
   final confirmed = await showDialog<bool>(
@@ -46,12 +44,22 @@ Future<void> confirmAndSignOut(BuildContext context) async {
   );
   if (confirmed != true || !context.mounted) return;
 
-  // Never leave the OS tunnel running past the session.
   final vpnBloc = context.read<VpnBloc>();
   if (vpnBloc.state.status != VpnStatus.disconnected) {
     AppLogger.i('UI', 'sign-out: disconnecting tunnel first');
     vpnBloc.add(const VpnToggled());
+    // Wait for the tunnel to actually drop (not just the event to queue)
+    // before leaving: navigating away first disposes the bloc mid-disconnect
+    // and can leave the OS tunnel up behind the login screen.
+    try {
+      await vpnBloc.stream
+          .firstWhere((s) => s.status == VpnStatus.disconnected)
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      AppLogger.w('UI', 'sign-out: disconnect wait timed out, leaving anyway');
+    }
   }
+  if (!context.mounted) return;
   context.read<AuthBloc>().add(const AuthSignOutSubmitted());
   AppLogger.i('ROUTE', 'sign-out → auth');
   context.go(AppPages.auth);

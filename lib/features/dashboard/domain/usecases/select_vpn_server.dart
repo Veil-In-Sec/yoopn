@@ -1,4 +1,3 @@
-import 'package:yoopn/core/utils/app_logger.dart';
 import '../entities/vpn_server.dart';
 import '../repositories/vpn_repository.dart';
 
@@ -7,8 +6,5 @@ class SelectVpnServerUseCase {
 
   final VpnRepository _repository;
 
-  VpnServer? call(String name) {
-    AppLogger.d('VPN', 'usecase.selectServer id=$name');
-    return _repository.findServer(name);
-  }
+  VpnServer? call(String name) => _repository.findServer(name);
 }

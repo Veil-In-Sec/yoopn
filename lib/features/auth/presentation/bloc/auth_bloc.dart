@@ -8,9 +8,6 @@ import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/auth/presentation/helper/friendly_auth_error.dart';
 import 'package:yoopn/core/utils/app_validators.dart';
 import 'package:yoopn/core/utils/internet_connections.dart';
-import 'package:yoopn/features/auth/data/datasources/auth_remote_data_source.dart';
-import 'package:yoopn/features/auth/data/models/auth_user_model.dart';
-import 'package:yoopn/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:yoopn/features/auth/domain/entities/auth_user_entity.dart';
 import 'package:yoopn/features/auth/domain/repositories/auth_repository.dart';
 import 'package:yoopn/features/auth/domain/usecases/auth_use_cases.dart';
@@ -23,12 +20,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   late final AuthUseCases _authUseCases;
   StreamSubscription<supabase.AuthState>? _authSubscription;
 
-  AuthBloc({AuthRepository? repository, AuthUseCases? useCases})
-    : _repository =
-          repository ??
-          AuthRepositoryImpl(remoteDataSource: AuthRemoteDataSourceImpl()),
-      super(const AuthState()) {
-    _authUseCases = useCases ?? AuthUseCases.fromRepository(_repository);
+  AuthBloc({required this._repository, required AuthUseCases useCases})
+      : super(const AuthState()) {
+    _authUseCases = useCases;
 
     on<AuthEmailChanged>(_onEmailChanged);
     on<AuthEmailSubmitted>(_onEmailSubmitted);
@@ -56,8 +50,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   @override
-  Future<void> close() {
-    _authSubscription?.cancel();
+  Future<void> close() async {
+    await _authSubscription?.cancel();
     return super.close();
   }
 
@@ -69,8 +63,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   void _onSessionChanged(AuthSessionChanged event, Emitter<AuthState> emit) {
     if (event.session != null) {
       AppLogger.i('AUTH', 'session changed → success user=${event.session!.user.email}');
-      final userEntity =
-          AuthUserModel.fromSupabaseUser(event.session!.user).toEntity();
+      final userEntity = _repository.mapSessionUser(event.session!);
 
       emit(
         state.copyWith(
@@ -185,7 +178,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } on supabase.AuthException catch (e) {
       AppLogger.w('AUTH', 'signIn AuthException code=${e.code} msg=${e.message}');
       final errorMsgLower = e.message.toLowerCase();
-      // If error indicates user not found or invalid credentials, attempt sign up automatically
       if (errorMsgLower.contains('invalid') ||
           errorMsgLower.contains('user not found') ||
           errorMsgLower.contains('credentials') ||

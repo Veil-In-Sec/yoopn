@@ -1,10 +1,5 @@
 import 'package:yoopn/core/utils/app_logger.dart';
 
-/// Typed failures for the dashboard feature.
-///
-/// The data layer throws [VpnException]; the repository maps it to a
-/// [VpnFailure] with a user-facing [message] the bloc can display directly.
-/// This keeps raw Dio/SQL/stack text out of the UI.
 class VpnException implements Exception {
   const VpnException(this.code, this.message, [this.cause]);
 
@@ -39,7 +34,6 @@ class VpnFailure {
     'Something went wrong. Please try again.',
   );
 
-  /// Map any thrown error to a displayable failure.
   factory VpnFailure.from(Object error) {
     final mapped = _map(error);
     AppLogger.w('VPN', 'failure mapped ${error.runtimeType} → ${mapped.code}: ${mapped.message}');

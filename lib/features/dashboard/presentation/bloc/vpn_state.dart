@@ -8,8 +8,6 @@ enum VpnServersStatus { initial, loading, loaded, failure }
 class VpnState {
   const VpnState({
     this.status = VpnStatus.disconnected,
-    // Placeholder only. It is replaced by the best live relay as soon as
-    // `VpnServersRequested` resolves, so connect never targets an empty id.
     this.server = '',
     this.errorMessage,
     this.servers = VpnServer.availableServers,
@@ -22,26 +20,17 @@ class VpnState {
 
   final VpnStatus status;
 
-  /// Selected server id (VPNGate hostName, or legacy country name).
   final String server;
   final String? errorMessage;
 
-  /// Live VPNGate list (falls back to [VpnServer.availableServers]).
   final List<VpnServer> servers;
   final VpnServersStatus serversStatus;
   final String? serversError;
 
-  /// When the current connection started (null while disconnected).
-  /// Drives the connection-duration readout; cleared on disconnect.
   final DateTime? connectedSince;
 
-  /// Live engine sub-stage while connecting (e.g. `Authenticating…`).
-  /// Empty when idle. Shown under "Connecting…" so slow relays don't look
-  /// frozen, and mirrored to Supabase telemetry on failure.
   final String connectionDetail;
 
-  /// When the current connect attempt started (null unless connecting).
-  /// Drives the elapsed-seconds readout next to [connectionDetail].
   final DateTime? connectStartedAt;
 
   bool get isLoadingServers => serversStatus == VpnServersStatus.loading;
@@ -64,7 +53,6 @@ class VpnState {
     String? connectionDetail,
     DateTime? connectStartedAt,
   }) {
-    // Disconnect clears both timers; an explicit connectedSince sets it.
     final effectiveStatus = status ?? this.status;
     final isConnecting = effectiveStatus == VpnStatus.connecting;
     final clearedTimer =
@@ -86,7 +74,6 @@ class VpnState {
     );
   }
 
-  // Value equality so Bloc skips emitting identical states.
   @override
   bool operator ==(Object other) =>
       other is VpnState &&

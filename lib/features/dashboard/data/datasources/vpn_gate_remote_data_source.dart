@@ -7,14 +7,10 @@ import '../../domain/entities/vpn_server.dart';
 import '../models/vpn_server_model.dart';
 
 abstract interface class VpnGateRemoteDataSource {
-  /// Stage 1 output: raw CSV converted to JSON maps. Test hook — inspect
-  /// this to verify the CSV -> JSON step without touching UI.
   Future<List<Map<String, dynamic>>> fetchJson({bool forceRefresh = false});
 
-  /// Stage 2 output: JSON wired into typed servers for repository/bloc/UI.
   Future<List<VpnServer>> fetchServers({bool forceRefresh = false});
 
-  /// Last JSON payload as a string (for caching / debugging / tests).
   String? get lastJsonString;
 
   DateTime? get lastFetchedAt;
@@ -26,8 +22,6 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
           dio ??
           Dio(
             BaseOptions(
-              // Fail fast on dead attempts for non-CSV calls. (The CSV fetch
-              // itself uses patient per-request timeouts — see _fetchRawCsv.)
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 15),
               sendTimeout: const Duration(seconds: 10),
@@ -43,6 +37,11 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
   List<Map<String, dynamic>>? _jsonCache;
   List<VpnServer>? _serverCache;
   DateTime? _fetchedAt;
+
+  /// In-flight dedup per kind: concurrent plain/forced fetches join instead
+  /// of stampeding the network + isolate parser.
+  Future<List<Map<String, dynamic>>>? _jsonInflight;
+  Future<List<Map<String, dynamic>>>? _jsonInflightForced;
 
   @override
   String? get lastJsonString =>
@@ -68,6 +67,27 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
       AppLogger.d('GATE', 'fetchJson → memory cache (${_jsonCache!.length} rows)');
       return _jsonCache!;
     }
+    final Future<List<Map<String, dynamic>>> pending;
+    if (forceRefresh) {
+      pending = _jsonInflightForced ??= _fetchAndParse();
+    } else {
+      pending = _jsonInflight ??= _fetchAndParse();
+    }
+    try {
+      return await pending;
+    } finally {
+      if (forceRefresh) {
+        if (identical(_jsonInflightForced, pending)) {
+          _jsonInflightForced = null;
+        }
+      } else if (identical(_jsonInflight, pending)) {
+        _jsonInflight = null;
+      }
+    }
+  }
+
+  /// Network + isolate parse + cache commit. Single flight per kind.
+  Future<List<Map<String, dynamic>>> _fetchAndParse() async {
     final netSw = Stopwatch()..start();
     final csv = await _fetchRawCsv();
     netSw.stop();
@@ -76,10 +96,6 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
       'TIMING network done in ${netSw.elapsedMilliseconds}ms '
       '(${csv.length} chars)',
     );
-    // Stage 1: CSV -> JSON, in a background isolate. This walks megabytes
-    // of text — on the UI thread it janks every animation for up to ~2s on
-    // slow phones. `csvToJson` is a pure static function, so `compute` can
-    // run it elsewhere; the row maps cross the isolate boundary fine.
     final parseSw = Stopwatch()..start();
     final json = await compute(VpnServerModel.csvToJson, csv);
     parseSw.stop();
@@ -90,7 +106,6 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
     if (json.isEmpty) {
       throw const FormatException('No VPN servers in VPNGate response');
     }
-    // Stage 2 (cached alongside so fetchServers never re-parses CSV).
     final modelSw = Stopwatch()..start();
     final servers = VpnServerModel.serversFromJson(json);
     modelSw.stop();
@@ -121,15 +136,9 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
     return _serverCache!;
   }
 
-  /// Attempts budget for one fetch. Deliberately generous: the visible UI
-  /// abandons waiting after 2s (refresh budget) and the SAME fetch keeps
-  /// going in the background, where patience is free. Short timeouts here
-  /// would kill slow-but-working links that just need 15–20s for megabytes.
   static const _attempts = 5;
 
   Future<String> _fetchRawCsv() async {
-    // Retry transient network errors with growing backoff (1s..4s). Parse
-    // errors throw FormatException and are never retried.
     Object? lastError;
     for (var attempt = 0; attempt < _attempts; attempt++) {
       final attemptSw = Stopwatch()..start();
@@ -137,9 +146,6 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
         final response = await _dio.get<String>(
           endpoint,
           options: Options(
-            // Patient per-request overrides (base Dio stays at 10s for
-            // everything else): a trickling multi-MB CSV must survive slow
-            // handshakes and long idle gaps between chunks.
             connectTimeout: const Duration(seconds: 30),
             receiveTimeout: const Duration(seconds: 60),
             sendTimeout: const Duration(seconds: 30),

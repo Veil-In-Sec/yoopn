@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:yoopn/features/dashboard/data/datasources/vpn_local_data_source.dart';
+import 'package:yoopn/features/dashboard/data/datasources/vpn_local_memory_data_source.dart';
 import 'package:yoopn/features/dashboard/data/models/vpn_server_model.dart';
 
 const _sampleCsv = '''
@@ -19,7 +19,6 @@ void main() {
     final cached = await local.loadCachedServers();
     expect(cached.length, 2);
 
-    // Best = highest score among reachable (public-vpn-119).
     final best = await local.loadBestServer();
     expect(best?.hostName, 'public-vpn-119');
 

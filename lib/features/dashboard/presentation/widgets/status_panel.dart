@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
@@ -10,8 +11,6 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/vpn_status.dart';
 
-/// Centered status readout above the power button (1.1.1.1 style):
-/// one short headline, one supporting line, nothing else.
 class StatusPanel extends StatelessWidget {
   const StatusPanel({super.key});
 
@@ -27,8 +26,6 @@ class StatusPanel extends StatelessWidget {
         final connected = status == VpnStatus.connected;
         final connecting = status == VpnStatus.connecting;
 
-        // While connecting show the live engine stage so a slow relay never
-        // looks frozen; otherwise the static subtitle.
         final supporting = connecting && detail.isNotEmpty
             ? detail
             : status.subtitle;
@@ -36,7 +33,6 @@ class StatusPanel extends StatelessWidget {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // State badge, directly under the toggle button.
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -47,7 +43,7 @@ class StatusPanel extends StatelessWidget {
                           ? AppColors.warning
                           : AppColors.disconnected,
                 ),
-                SizedBox(width: 8.w),
+                Spacing.horizontal(8),
                 Text(
                   connected
                       ? 'Protected'
@@ -62,16 +58,12 @@ class StatusPanel extends StatelessWidget {
                 ),
               ],
             ),
-            SizedBox(height: 10.h),
-            // Reserve two lines so switching between status/subtitle never
-            // nudges the toggle button.
+            Spacing.vertical(10),
             SizedBox(
               height: 34.h * 2,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // While connected the headline itself is the live
-                  // session timer ("Connected for 00:12:34").
                   if (connected && since != null)
                     _ConnectedTimerTitle(since: since)
                   else
@@ -86,7 +78,7 @@ class StatusPanel extends StatelessWidget {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                  SizedBox(height: 4.h),
+                  Spacing.vertical(4),
                   Text(
                     supporting,
                     maxLines: 1,
@@ -100,7 +92,7 @@ class StatusPanel extends StatelessWidget {
               ),
             ),
             if (connecting) ...[
-              SizedBox(height: 4.h),
+              Spacing.vertical(4),
               _CancelLink(),
             ],
           ],
@@ -125,8 +117,6 @@ class _Dot extends StatelessWidget {
   }
 }
 
-/// Headline replacement while connected: ticks every second showing
-/// "Connected for HH:MM:SS".
 class _ConnectedTimerTitle extends StatefulWidget {
   const _ConnectedTimerTitle({required this.since});
 
@@ -173,8 +163,6 @@ class _ConnectedTimerTitleState extends State<_ConnectedTimerTitle> {
   }
 }
 
-/// Escape hatch while connecting — dispatches VpnToggled, which the bloc
-/// turns into a cancel of the in-flight attempt.
 class _CancelLink extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

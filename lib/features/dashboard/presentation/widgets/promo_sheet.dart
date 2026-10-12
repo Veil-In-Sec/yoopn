@@ -1,84 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:yoopn/core/dimentions/spacings.dart';
+import 'package:go_router/go_router.dart';
+import 'package:yoopn/core/ads/ad_carousel_widget.dart';
+import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
-import 'package:yoopn/core/utils/app_logger.dart';
+import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
+import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 
-/// Draggable promo sheet docked over home: rests at the bottom third, slides
-/// up to near-full. Two sections — premium plan and rewarded ad. Actions are
-/// placeholders for now (store purchase + AdMob come later).
 class PromoSheet extends StatelessWidget {
   const PromoSheet({super.key});
 
-  void _comingSoon(BuildContext context, String feature) {
-    AppLogger.i('UI', 'Promo tapped → $feature (coming soon)');
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('$feature coming soon'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  VpnServer _selected(List<VpnServer> servers, String id) {
+    for (final s in servers) {
+      if (s.matchesId(id)) return s;
+    }
+    return servers.isNotEmpty
+        ? servers.first
+        : const VpnServer(name: 'United States', flag: '🇺🇸');
   }
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.52,
-      minChildSize: 0.24,
-      maxChildSize: 0.95,
-      snap: true,
-      snapSizes: const [0.24, 0.52, 0.95],
-      builder: (_, controller) => Container(
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
         padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 20.h),
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
           border: Border.all(color: AppColors.border),
         ),
-        child: ListView(
-          controller: controller,
-          padding: EdgeInsets.zero,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Drag handle.
-            Center(
-              child: Container(
-                width: 40.w,
-                height: 4.h,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(4.r),
-                ),
-              ),
+            _SectionLabel(text: 'Servers'),
+            Spacing.vertical(4),
+            BlocBuilder<VpnBloc, VpnState>(
+              buildWhen: (prev, curr) =>
+                  prev.server != curr.server || prev.servers != curr.servers,
+              builder: (context, state) {
+                final selected = _selected(state.servers, state.server);
+                return _PromoOption(
+                  icon: Icons.dns_rounded,
+                  iconColor: AppColors.primary,
+                  iconBackground: AppColors.primaryContainer,
+                  title: '${selected.flag} ${selected.name}',
+                  subtitle: selected.isVpnGate
+                      ? '${selected.hostName} • ${selected.speedText} — tap to change'
+                      : 'Tap to choose a server',
+                  onTap: () => context.push(AppPages.servers),
+                );
+              },
             ),
-            SizedBox(height: 12.h),
-            _SectionLabel(text: 'Premium'),
-            SizedBox(height: 4.h),
-            _PromoOption(
-              icon: Icons.workspace_premium_rounded,
-              iconColor: AppColors.primary,
-              iconBackground: AppColors.primaryContainer,
-              title: 'Buy Premium Plan',
-              subtitle: 'Faster servers, no limits',
-              onTap: () => _comingSoon(context, 'Premium plan'),
-            ),
-            SizedBox(height: 8.h),
-            const _Perk(text: 'Priority fastest servers'),
-            const _Perk(text: 'No limits, no throttling'),
-            const _Perk(text: 'More server selections'),
-            const _Perk(text: 'More secure encrypted connection gateway'),
             Divider(height: 24.h, color: AppColors.divider),
             _SectionLabel(text: 'Advertisement'),
-            SizedBox(height: 8.h),
-            // Direct ad slot: swap this placeholder with the AdMob banner
-            // widget (AdWidget) on integration. Not tappable — ads render
-            // here inline, no reward flow.
-            const _AdSlot(),
-            // Second ad slot, revealed on slide-up / scroll.
-            SizedBox(height: 16.h),
+            Spacing.vertical(8),
+            const AdCarouselWidget(),
+            Spacing.vertical(12),
             _SectionLabel(text: 'Advertisement'),
-            SizedBox(height: 8.h),
-            const _AdSlot(),
+            Spacing.vertical(8),
+            const AdCarouselWidget(),
+            Spacing.vertical(8),
           ],
         ),
       ),
@@ -86,46 +74,8 @@ class PromoSheet extends StatelessWidget {
   }
 }
 
-/// Inline ad placeholder. Swap with the AdMob banner widget on integration.
-class _AdSlot extends StatelessWidget {
-  const _AdSlot();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 96.h,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'Ad',
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textHint,
-            ),
-          ),
-          SizedBox(height: 2.h),
-          Text(
-            'Advertisement',
-            style: TextStyle(
-              fontSize: 10.sp,
-              color: AppColors.textHint,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {  const _SectionLabel({required this.text});
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.text});
 
   final String text;
 
@@ -138,38 +88,6 @@ class _SectionLabel extends StatelessWidget {  const _SectionLabel({required thi
         fontWeight: FontWeight.w700,
         letterSpacing: 1.2,
         color: AppColors.textSecondary,
-      ),
-    );
-  }
-}
-
-class _Perk extends StatelessWidget {
-  const _Perk({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(left: 4.w, top: 4.h),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.check_circle_rounded,
-            size: 16,
-            color: AppColors.success,
-          ),
-          SizedBox(width: 8.w),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 12.5.sp,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -210,7 +128,7 @@ class _PromoOption extends StatelessWidget {
               ),
               child: Icon(icon, color: iconColor, size: 24.r),
             ),
-            SizedBox(width: 12.w),
+            Spacing.horizontal(12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,7 +144,7 @@ class _PromoOption extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  SizedBox(height: 2.h),
+                  Spacing.vertical(2),
                   Text(
                     subtitle,
                     maxLines: 1,

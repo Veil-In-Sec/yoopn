@@ -5,24 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:yoopn/app.dart';
+import 'package:yoopn/core/ads/ad_config.dart';
+import 'package:yoopn/core/ads/rewarded_ad_manager.dart';
 import 'package:yoopn/core/config/supabase_config.dart';
 import 'package:yoopn/core/telemetry/supabase_telemetry.dart';
 import 'package:yoopn/core/utils/app_bloc_observer.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/core/utils/dependency_injection.dart';
 
-/// Errors that must NOT reach `crash_reports`.
-///
-/// These are recoverable/environmental, not defects:
-///
-/// - **Layout overflow** — a layout bug caught by the framework, expected
-///   while a screen resizes.
-/// - **Transient network** — `SocketException`, `AuthRetryableFetchException`,
-///   Supabase auth refresh retries while a VPN tunnel or flaky Wi-Fi is up.
-///   GoTrue retries these internally and recovers; treating each retry as a
-///   crash floods the table (one offline minute produced 3 reports).
 bool _isBenign(Object error) {
   if (error is FlutterError && error.toString().contains('overflowed by')) {
     AppLogger.w('UI', 'RenderFlex overflow (not reported as crash)');
@@ -38,6 +31,12 @@ bool _isBenign(Object error) {
   }
   if (error.toString().contains('AuthRetryableFetchException')) {
     AppLogger.w('TELEMETRY', 'Supabase auth refresh retry (not a crash)');
+    return true;
+  }
+  if (error.toString().contains('google_mobile_ads') ||
+      (error.runtimeType.toString() == 'MissingPluginException' &&
+          error.toString().contains('plugins.flutter.io'))) {
+    AppLogger.w('TELEMETRY', 'ads plugin miss (not a crash)');
     return true;
   }
   return false;
@@ -65,7 +64,7 @@ void main(List<String> args) async {
       try {
         await _init();
       } catch (e, st) {
-        AppLogger.e('APP', 'init failed — app will still try to run', e, st);
+        AppLogger.e('APP', 'init failed - app will still try to run', e, st);
         await Telemetry.reportCrash(e, st, context: {'phase': 'init'});
       }
       Telemetry.init();
@@ -100,8 +99,20 @@ Future<void> _init() async {
     publishableKey: SupabaseConfig.publishableKey,
   );
   AppLogger.i('APP', 'Supabase initialized, session=${Supabase.instance.client.auth.currentSession != null}');
-  AppLogger.d('APP', 'init_dependency_injection start');
-  await init_dependency_injection();
+  try {
+    await MobileAds.instance.initialize();
+    AppLogger.i(
+      'ADS',
+      AdConfig.isTestMode
+          ? 'AdMob ready (TEST ads — pass ADMOB_* dart-defines for release)'
+          : 'AdMob ready (production ids)',
+    );
+  } catch (e) {
+    AppLogger.w('ADS', 'AdMob init failed: $e');
+  }
+  unawaited(RewardedAdManager.instance.preload());
+  AppLogger.d('APP', 'initDependencyInjection start');
+  await initDependencyInjection();
   AppLogger.i('APP', 'dependency injection done');
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(

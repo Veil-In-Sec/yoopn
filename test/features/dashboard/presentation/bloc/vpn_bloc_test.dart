@@ -30,8 +30,6 @@ const _relay2 = VpnServer(
   openVpnConfig: 'Y2xpZW50CmRldiB0dW4K',
 );
 
-/// Controllable fake: connect/disconnect/search can be delayed or made to
-/// fail, and detail text can be pushed on demand.
 class _FakeVpnRepository implements VpnRepository {
   final List<VpnServer> relays;
   final _details = StreamController<String>.broadcast();
@@ -93,8 +91,6 @@ class _FakeVpnRepository implements VpnRepository {
   Future<void> dispose() => _details.close();
 }
 
-/// A repo whose highest-score entry is a config-less stub, to prove the
-/// default-selection skips entries that cannot be dialled.
 class _MixedRepository implements VpnRepository {
   static const stub = VpnServer(
     name: 'United States',
@@ -169,7 +165,7 @@ void main() {
   group('connect', () {
     test('toggled on a disconnected state connects and records the timer',
         () async {
-      await repository.getServers(); // warm nothing; selection defaults to JP below
+      await repository.getServers();
       bloc.add(const VpnServersRequested());
       await bloc.stream.firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
@@ -199,9 +195,6 @@ void main() {
     });
 
     test('refuses to connect when the selection no longer exists', () async {
-      // No live relays — only config-less placeholders — so connect is
-      // blocked before touching the tunnel and a background refresh is
-      // kicked off. Empty ids never match placeholders (matchesId('') == false).
       repository = _FakeVpnRepository(relays: const []);
       await bloc.close();
       bloc = build();
@@ -304,16 +297,12 @@ void main() {
   });
 
   group('default server selection', () {
-    // Regression: `server` used to default to 'United States', a config-less
-    // fallback entry, so pressing connect straight after launch always failed
-    // with bad-config until the user opened the server sheet.
     test('auto-selects the best live relay on first load', () async {
       bloc.add(const VpnServersRequested());
       final loaded = await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
       expect(loaded.server, 'public-vpn-1');
-      // And it must be a relay that can actually be dialled.
       final selected = loaded.servers.firstWhere(
         (s) => s.matchesId(loaded.server),
       );
@@ -323,7 +312,6 @@ void main() {
 
     test('skips relays without a config when choosing the default',
         () async {
-      // Highest-scoring entry has no OpenVPN config (a fallback stub).
       final repo = _MixedRepository();
       final mixedBloc = VpnBloc(
         useCases: DashboardUseCases.fromRepository(repo),
@@ -356,9 +344,6 @@ void main() {
   });
 
   group('duplicate connect guard', () {
-    // The native engine can still be handshaking after the bloc reports
-    // disconnected (e.g. the previous attempt failed). A second connect()
-    // then spawns a duplicate OpenVPN process and orphans the first tunnel.
     test('only one connect runs per successful attempt', () async {
       bloc.add(const VpnServersRequested());
       await bloc.stream
@@ -390,7 +375,6 @@ void main() {
       bloc.add(const VpnToggled());
       await bloc.stream.firstWhere((s) => s.status == VpnStatus.connected);
 
-      // Retry reached the tunnel — the guard did not stay latched.
       expect(repository.connectCalls, 2);
     });
 
@@ -447,7 +431,6 @@ void main() {
   });
 }
 
-/// Minimal repository used to assert forceRefresh propagation.
 class _ProbeRepository implements VpnRepository {
   final void Function(bool forceRefresh) onGetServers;
   final _details = StreamController<String>.broadcast();

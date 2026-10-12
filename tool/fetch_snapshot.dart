@@ -1,15 +1,3 @@
-// Bakes a bundled VPNGate snapshot for instant first launch.
-//
-// Usage (re-run before releases so the snapshot stays fresh):
-//   dart tool/fetch_snapshot.dart
-//
-// What it does: downloads the live CSV, parses it with the app's OWN
-// [VpnServerModel] pipeline (so the format can never drift from what the
-// app reads), and writes `assets/servers_snapshot.json` — the full row maps
-// WITH OpenVPN configs, so a fresh install can list AND connect without
-// any network. Stale relays die gracefully at connect time (timeout /
-// auth-rejected handling) and the next successful refresh replaces the
-// snapshot in memory + sqflite.
 import 'dart:convert';
 import 'dart:io';
 

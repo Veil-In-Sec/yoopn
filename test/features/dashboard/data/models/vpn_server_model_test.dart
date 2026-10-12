@@ -16,7 +16,6 @@ empty-config,5.6.7.8,10,10,100,Germany,DE,1,10,1,100,2weeks,Op,Msg,
   test('stage 1: CSV -> JSON maps with tolerant Message commas', () {
     final json = VpnServerModel.csvToJson(sampleCsv);
 
-    // 2 valid rows: plain + comma-in-message. Bad + empty-config skipped.
     expect(json.length, 2);
 
     final first = json.firstWhere((e) => e['hostName'] == 'public-vpn-119');
@@ -32,7 +31,6 @@ empty-config,5.6.7.8,10,10,100,Germany,DE,1,10,1,100,2weeks,Op,Msg,
     final second = json.firstWhere((e) => e['hostName'] == 'public-vpn-202');
     expect(second['message'], 'Hello, world, with, commas');
 
-    // JSON must round-trip through jsonEncode for caching.
     expect(() => jsonEncode(json), returnsNormally);
   });
 
@@ -41,13 +39,11 @@ empty-config,5.6.7.8,10,10,100,Germany,DE,1,10,1,100,2weeks,Op,Msg,
     final servers = VpnServerModel.serversFromJson(json);
 
     expect(servers.length, 2);
-    // Higher score first.
     expect(servers.first.hostName, 'public-vpn-119');
     expect(servers.first.isVpnGate, isTrue);
     expect(servers.first.speedText, isNotEmpty);
     expect(servers.first.decodedOpenVpnConfig, isNotEmpty);
 
-    // Entity toJson pairs with fromJson.
     final roundTrip = VpnServerModel.fromJson(servers.first.toJson());
     expect(roundTrip, servers.first);
   });

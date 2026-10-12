@@ -1,10 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Maps any auth failure to one short, actionable snackbar line.
-///
-/// Raw Supabase/platform text ("AuthException: ...", "Exception: ...",
-/// socket dumps) must never reach the UI. Unknown errors fall through to a
-/// generic line — never the raw `toString()`.
 String friendlyAuthError(Object error) {
   var code = '';
   var message = '';

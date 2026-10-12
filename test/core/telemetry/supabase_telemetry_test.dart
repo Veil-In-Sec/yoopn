@@ -1,9 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yoopn/core/telemetry/supabase_telemetry.dart';
 
-/// Guards the two safety properties the whole app depends on:
-/// 1. Never throws when Supabase is absent (tests, offline, early boot).
-/// 2. Session id is stable per launch and unique across launches.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 
-/// Static document page (Terms, Safety, Disclaimer): back button, title,
-/// headed sections. Content lives in the const lists below.
 class InfoScreen extends StatelessWidget {
   const InfoScreen({super.key, required this.title, required this.sections});
 
@@ -33,7 +31,7 @@ class InfoScreen extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
-                  SizedBox(width: 4.w),
+                  Spacing.horizontal(4),
                   Expanded(
                     child: Text(
                       title,
@@ -58,7 +56,7 @@ class InfoScreen extends StatelessWidget {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                SizedBox(height: 6.h),
+                Spacing.vertical(6),
                 Text(
                   body,
                   style: TextStyle(
@@ -96,10 +94,9 @@ const termsSections = <(String, String)>[
         'account credentials safe and for signing out on shared devices.',
   ),
   (
-    'Premium plans',
-    'Paid plans, where offered, are billed through the app store. Plan '
-        'benefits apply while the subscription is active and may vary by '
-        'region.',
+    'Free service',
+    'YooPN is free and supported by ads. There are no paid plans or '
+        'subscriptions.',
   ),
 ];
 

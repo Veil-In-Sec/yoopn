@@ -31,7 +31,6 @@ class AuthPasswordSubmitted extends AuthEvent {
   @override
   List<Object?> get props => [password];
 
-  // Never log credentials: Equatable's default toString prints every prop.
   @override
   String toString() => 'AuthPasswordSubmitted(***)';
 }
@@ -44,7 +43,6 @@ class AuthOtpSubmitted extends AuthEvent {
   @override
   List<Object?> get props => [otp];
 
-  // Never log credentials: Equatable's default toString prints every prop.
   @override
   String toString() => 'AuthOtpSubmitted(***)';
 }
@@ -61,7 +59,6 @@ class AuthSessionChanged extends AuthEvent {
   @override
   List<Object?> get props => [session];
 
-  // Never log tokens: the session stringifies access/refresh tokens.
   @override
   String toString() =>
       'AuthSessionChanged(hasSession=${session != null})';
@@ -92,7 +89,6 @@ class AuthPasswordUpdateSubmitted extends AuthEvent {
   @override
   List<Object?> get props => [password];
 
-  // Never log credentials: Equatable's default toString prints every prop.
   @override
   String toString() => 'AuthPasswordUpdateSubmitted(***)';
 }

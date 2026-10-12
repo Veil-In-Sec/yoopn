@@ -29,6 +29,8 @@ abstract class AuthRepository {
 
   Future<void> signOut();
 
+  AuthUserEntity mapSessionUser(Session session);
+
   Session? get currentSession;
 
   Stream<AuthState> get onAuthStateChange;

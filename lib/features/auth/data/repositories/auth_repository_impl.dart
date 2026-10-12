@@ -4,6 +4,7 @@ import '../../domain/entities/auth_user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_data_source.dart';
 import '../models/auth_credentials_model.dart';
+import '../models/auth_user_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
@@ -89,6 +90,10 @@ class AuthRepositoryImpl implements AuthRepository {
     AppLogger.i('AUTH', 'repo.signOut');
     await remoteDataSource.signOut();
   }
+
+  @override
+  AuthUserEntity mapSessionUser(Session session) =>
+      AuthUserModel.fromSupabaseUser(session.user).toEntity();
 
   @override
   Session? get currentSession => remoteDataSource.currentSession;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yoopn/core/widgets/app_snackbar.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -55,19 +56,16 @@ class _PasswordScreenState extends State<PasswordScreen> {
             context.go(AppPages.home);
             break;
           case AuthStatus.failure:
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.errorMsg ?? 'Authentication failed'),
-                backgroundColor: AppColors.error,
-              ),
+            showAppSnackBar(
+              context,
+              state.errorMsg ?? 'Authentication failed',
+              isError: true,
             );
             break;
           case AuthStatus.otpSent:
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message ?? 'Please check your email'),
-                backgroundColor: AppColors.primary,
-              ),
+            showAppSnackBar(
+              context,
+              state.message ?? 'Please check your email',
             );
             break;
           case AuthStatus.initial:

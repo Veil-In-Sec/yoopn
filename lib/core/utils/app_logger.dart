@@ -2,27 +2,11 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 
-/// Central tagged logger for the whole app.
-///
-/// Usage:
-/// ```dart
-/// AppLogger.d('AUTH', 'signIn attempt for $email');
-/// AppLogger.i('VPN', 'connected to $serverId');
-/// AppLogger.w('NET', 'offline, serving cache');
-/// AppLogger.e('VPN', 'connect failed', error, stackTrace);
-/// ```
-///
-/// - In debug: prints to console with emoji + timestamp + tag.
-/// - Always: forwards to `dart:developer log` so DevTools Logging view works.
-/// - Never log passwords, OTP codes, tokens or full OpenVPN configs.
-///   Log lengths / masked values instead (see [maskEmail]).
 class AppLogger {
   AppLogger._();
 
-  /// Master switch. Keep `true` while developing.
   static bool enabled = true;
 
-  /// Max chars for inline values (prevents 10MB CSV dumps in logs).
   static int maxLength = 400;
 
   static void d(String tag, String message) =>
@@ -60,7 +44,6 @@ class AppLogger {
     final buffer = StringBuffer('$emoji [$time][$level][$tag] $message');
     if (error != null) buffer.write(' | err=$error');
 
-    // DevTools Logging view (works in debug + profile).
     developer.log(
       message,
       time: now,
@@ -70,7 +53,6 @@ class AppLogger {
       level: _levelValue(level),
     );
 
-    // Console output (debug only to keep release APK clean).
     if (kDebugMode) {
       debugPrint(buffer.toString());
       if (stackTrace != null) {
@@ -95,7 +77,6 @@ class AppLogger {
     }
   }
 
-  /// Truncate long values (CSV bodies, JSON, configs) before logging.
   static String short(Object? value, [int? max]) {
     final s = '$value';
     final m = max ?? maxLength;
@@ -103,7 +84,6 @@ class AppLogger {
     return '${s.substring(0, m)}…(${s.length} chars)';
   }
 
-  /// `john.doe@mail.com` -> `joh***@mail.com`. Safe to log.
   static String maskEmail(String email) {
     final parts = email.split('@');
     if (parts.length != 2 || parts[0].length < 2) return '***@***';

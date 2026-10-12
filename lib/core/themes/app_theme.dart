@@ -43,8 +43,6 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      // Bundled via pubspec `fonts:` — zero network, zero first-paint swap.
-      // w500/w600 resolve to the nearest declared weight (400/700).
       fontFamily: 'Inter',
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,

@@ -3,7 +3,6 @@ import 'app_regex.dart';
 class AppValidators {
   AppValidators._();
 
-  /// Validates an email address.
   static String? validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Please enter your email address.';
@@ -14,7 +13,6 @@ class AppValidators {
     return null;
   }
 
-  /// Validates a password.
   static String? validatePassword(String? value) {
     if (value == null || value.isEmpty) {
       return 'Please enter your password.';
@@ -25,7 +23,6 @@ class AppValidators {
     return null;
   }
 
-  /// Validates a required text field.
   static String? validateRequired(String? value, String fieldName) {
     if (value == null || value.trim().isEmpty) {
       return 'Please enter $fieldName.';

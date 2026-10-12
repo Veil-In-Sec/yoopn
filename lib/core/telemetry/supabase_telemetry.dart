@@ -4,41 +4,22 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 
-/// Production telemetry backed by Supabase Postgres.
-///
-/// Supabase ships no Crashlytics product, so this service writes:
-/// - user/product events → `analytics_events`
-/// - uncaught errors + VPN/auth failures → `crash_reports`
-///
-/// Review them in the Supabase dashboard (SQL editor / Table editor).
-/// See `supabase/migrations/001_app_telemetry.sql` for the schema and
-/// `supabase/README.md` for review queries.
-///
-/// Guarantees:
-/// - Never throws: every call is guarded, safe from blocs, UI and tests.
-/// - No-op until Supabase is initialized (unit tests stay offline-safe).
-/// - Privacy: callers MUST mask emails ([AppLogger.maskEmail]) and MUST
-///   never pass passwords, OTP codes, tokens or OpenVPN configs.
 class Telemetry {
   Telemetry._();
 
-  /// Master switch (e.g. disable for automated tests).
   static bool enabled = true;
 
-  /// Keep in sync with `pubspec.yaml` version.
   static String appVersion = '1.0.0+1';
 
   static String? _sessionId;
 
-  /// Stable id for one app launch; groups events of a session together.
   static String get sessionId {
     return _sessionId ??= '${DateTime.now().millisecondsSinceEpoch}-'
         '${Random().nextInt(1 << 32).toRadixString(16)}';
   }
 
-  /// Call once after `Supabase.initialize` in `main()`.
   static void init() {
-    _sessionId = null; // fresh id per launch
+    _sessionId = null;
     AppLogger.i('TELEMETRY', 'session $sessionId (app $appVersion)');
     track('app_open', {
       'platform': defaultTargetPlatform.name,
@@ -50,7 +31,7 @@ class Telemetry {
     try {
       return Supabase.instance.client;
     } catch (_) {
-      return null; // not initialized (tests, early boot)
+      return null;
     }
   }
 
@@ -61,7 +42,6 @@ class Telemetry {
     'user_id': _client?.auth.currentUser?.id,
   };
 
-  /// Fire-and-forget analytics event. Safe to call without awaiting.
   static Future<void> track(
     String event, [
     Map<String, Object?> props = const {},
@@ -80,17 +60,13 @@ class Telemetry {
         'props': props,
       });
     } catch (e) {
-      // Telemetry must never break the app (offline, missing table, RLS).
       AppLogger.w('TELEMETRY', 'track $event dropped: $e');
     }
   }
 
-  /// Shorthand for screen views.
   static Future<void> screen(String name) =>
       track('screen_view', {'screen': name});
 
-  /// Crash / fatal-error report. Also mirrors to [AppLogger.e] so the
-  /// console + DevTools keep the full trace during development.
   static Future<void> reportCrash(
     Object error,
     StackTrace? stackTrace, {

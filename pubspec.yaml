@@ -31,12 +31,8 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   flutter_bloc: ^9.1.1
   equatable: ^3.0.0
-  flutter_svg: ^2.3.0
   flutter_screenutil: ^5.9.3
   go_router: ^18.0.2
   dio: ^5.11.1
@@ -50,6 +46,8 @@ dependencies:
   sqflite_common_ffi: ^2.4.3
   openvpn_flutter: ^1.3.4
   permission_handler: ^12.0.0
+  google_mobile_ads: ^9.1.0
+  provider: ^6.1.5+1
 
 dev_dependencies:
   flutter_test:
@@ -82,7 +80,6 @@ flutter:
   assets:
     - .env
     - assets/lottie/
-    - assets/logo/
     - assets/servers_snapshot.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -97,8 +94,7 @@ flutter:
   # list giving the asset and other descriptors for the font.
   #
   # Inter is bundled (no runtime download): the 18pt optical cut suits UI
-  # text sizes. The 24pt/28pt files in assets/fonts/ are intentionally
-  # unreferenced — delete them to keep the repo lean.
+  # text sizes.
   fonts:
     - family: Inter
       fonts:

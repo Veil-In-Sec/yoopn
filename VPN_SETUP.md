@@ -15,7 +15,8 @@ Real OpenVPN tunneling via `openvpn_flutter: ^1.3.4` + VPNGate configs
 - `android/.../MainActivity.kt`: forwards VPN-consent result via
   `OpenVPNFlutterPlugin.connectWhileGranted(...)` (else connect hangs).
 - `AndroidManifest.xml`: `android:extractNativeLibs="true"`.
-- `android/gradle.properties`: `android.bundle.enableUncompressedNativeLibs=false`.
+- `android/gradle.properties`: deliberately does NOT set
+  `android.bundle.enableUncompressedNativeLibs` (AGP 9.x removed it).
 - `android/app/build.gradle.kts`: `packaging.jniLibs.useLegacyPackaging=true`.
 - `ios/VPNExtension/PacketTunnelProvider.swift` + `README.md`: template +
   manual Xcode steps.

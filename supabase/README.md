@@ -72,7 +72,6 @@ where session_id = '<session-id>' order by created_at;
 | `vpn_connected` | server, elapsed_s |
 | `vpn_connect_failed` | server, error, stage, elapsed_s |
 | `vpn_disconnect` / `vpn_cancelled` | server |
-| `speed_test_result` | download_mbps, upload_mbps, ping_ms |
 | `screen_view` | screen (name from `AppPages`) |
 
 ## What is captured
@@ -84,8 +83,7 @@ where session_id = '<session-id>' order by created_at;
 * `lib/features/dashboard/presentation/bloc/vpn_bloc.dart` — VPN lifecycle,
   including the sub-stage a failed relay died at (`props->>'stage'`).
 * `lib/features/auth/presentation/bloc/auth_bloc.dart` — sign-in/up/OTP/Google
-  outcomes; `lib/features/dashboard/presentation/bloc/speed_test_cubit.dart` —
-  speed-test results.
+  outcomes.
 
 ## Privacy
 

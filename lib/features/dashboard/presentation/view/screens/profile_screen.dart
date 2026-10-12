@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:yoopn/core/widgets/app_snackbar.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
@@ -10,8 +11,6 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/vpn_status.dart';
 
-/// Account setup: OAuth avatar when available, email/password management,
-/// live tunnel state. Sign-out moved to the menu bottom.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
@@ -27,8 +26,6 @@ class ProfileScreen extends StatelessWidget {
     final displayName = context.select<AuthBloc, String?>(
       (bloc) => bloc.state.user?.displayName,
     );
-    // Promotion-friendly locals: headline prefers the name, tile falls back
-    // to the setup prompt.
     final dn = displayName;
     final hasName = dn != null && dn.isNotEmpty;
     final headline =
@@ -40,16 +37,7 @@ class ProfileScreen extends StatelessWidget {
       listener: (context, state) {
         final text = state.errorMsg ?? state.message;
         if (text == null) return;
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(text),
-              backgroundColor:
-                  state.errorMsg != null ? AppColors.error : null,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+        showAppSnackBar(context, text, isError: state.errorMsg != null);
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -71,7 +59,7 @@ class ProfileScreen extends StatelessWidget {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(width: 4.w),
+                    Spacing.horizontal(4),
                     Text(
                       'Account setup',
                       style: TextStyle(
@@ -134,7 +122,6 @@ class ProfileScreen extends StatelessWidget {
                   value: email.isEmpty ? 'No email available' : email,
                 ),
                 Spacing.vertical(12),
-                // Live tunnel state instead of a hardcoded claim.
                 BlocBuilder<VpnBloc, VpnState>(
                   buildWhen: (prev, curr) =>
                       prev.status != curr.status ||

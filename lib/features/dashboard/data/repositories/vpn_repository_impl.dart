@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:yoopn/core/errors/vpn_failures.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
@@ -11,6 +12,13 @@ import '../datasources/vpn_data_source.dart';
 import '../datasources/vpn_gate_remote_data_source.dart';
 import '../datasources/vpn_local_data_source.dart';
 import '../models/vpn_server_model.dart';
+
+/// Runs inside `compute`: the bundled snapshot is ~1.3MB of JSON.
+List<VpnServer>? _parseSnapshotIsolate(String raw) {
+  final decoded = jsonDecode(raw);
+  if (decoded is! List) return null;
+  return VpnServerModel.serversFromJson(decoded);
+}
 
 class VpnRepositoryImpl implements VpnRepository {
   VpnRepositoryImpl({
@@ -157,9 +165,10 @@ class VpnRepositoryImpl implements VpnRepository {
     if (_snapshot != null) return _snapshot!;
     try {
       final raw = await rootBundle.loadString('assets/servers_snapshot.json');
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return const [];
-      _snapshot = VpnServerModel.serversFromJson(decoded);
+      // Decoding + modeling ~1.3MB of JSON is isolate work, not a frame
+      // budget: run it off the main isolate to keep startup jank-free.
+      final parsed = await compute(_parseSnapshotIsolate, raw);
+      _snapshot = parsed ?? const [];
       AppLogger.i('VPN', 'snapshot parsed (${_snapshot!.length} servers)');
     } catch (e) {
       AppLogger.w('VPN', 'bundled snapshot unavailable: $e');
@@ -222,7 +231,9 @@ class VpnRepositoryImpl implements VpnRepository {
     } catch (_) {}
     if (_servers.isNotEmpty) {
       final pool = _servers.where((s) => s.ping >= 0).toList();
-      final candidates = pool.isEmpty ? _servers : pool;
+      // Never sort the shared `_servers` list in place — readers rely on
+      // the score-DESC order and an atomic reference swap.
+      final candidates = pool.isEmpty ? [..._servers] : pool;
       candidates.sort(compareServersByQuality);
       return candidates.first;
     }

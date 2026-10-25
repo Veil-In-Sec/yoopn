@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 class AppLogger {
   AppLogger._();
 
-  static bool enabled = true;
+  /// Logging is a debug aid (telemetry reports errors on its own); release
+  /// builds short-circuit every call before any string is built.
+  static bool enabled = kDebugMode;
 
   static int maxLength = 400;
 

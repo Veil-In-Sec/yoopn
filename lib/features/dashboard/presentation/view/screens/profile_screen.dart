@@ -42,7 +42,9 @@ class ProfileScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
-          child: Padding(
+          // Scrollable for small screens / large text scale — tiles had
+          // overflow on short viewports with the fixed Column + Spacer.
+          child: SingleChildScrollView(
             padding: EdgeInsets.all(20.r),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,7 +212,6 @@ class ProfileScreen extends StatelessWidget {
                         ),
                   ),
                 ),
-                const Spacer(),
                 Spacing.vertical(12),
               ],
             ),
@@ -270,7 +271,7 @@ class ProfileScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 }
 
@@ -322,6 +323,8 @@ class _InfoTile extends StatelessWidget {
                 Spacing.vertical(4),
                 Text(
                   value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 14.sp,
                     fontWeight: FontWeight.w600,
@@ -389,6 +392,8 @@ class _ActionTile extends StatelessWidget {
                     Spacing.vertical(4),
                     Text(
                       value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w600,

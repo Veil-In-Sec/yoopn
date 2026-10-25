@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 import 'package:flutter/foundation.dart';
 import 'package:openvpn_flutter/openvpn_flutter.dart';
 import 'package:yoopn/core/errors/vpn_failures.dart';
@@ -43,6 +44,21 @@ class OpenVpnTunnel implements VpnTunnel {
   Timer? _pollTimer;
   bool _cancelRequested = false;
 
+  /// App lifecycle, observed lazily (unit tests never construct this class).
+  /// While a system dialog (the very first VPN consent!) sits in front of our
+  /// activity the lifecycle leaves `resumed` — a direct, reliable signal that
+  /// any "disconnected" stage report is stale tunnel state, not a failure.
+  AppLifecycleState? _lifecycle;
+  bool _lifecycleWatched = false;
+  Timer? _consentVerdictTimer;
+
+  /// Open right after a resume while the engine has shown no forward
+  /// movement yet: the plugin's post-allow restart first emits transient
+  /// idle markers (noprocess / no_connection) that must not kill the
+  /// attempt. Closed on engine movement, cancel, teardown or when the
+  /// dismissal verdict fires.
+  bool _settleWindowOpen = false;
+
   @override
   Stream<VpnTunnelStatus> get statusStream => _controller.stream;
 
@@ -65,6 +81,119 @@ class OpenVpnTunnel implements VpnTunnel {
       if (identical(_initInflight, future)) _initInflight = null;
     });
     return future;
+  }
+
+  void _ensureLifecycleWatched() {
+    if (_lifecycleWatched) return;
+    try {
+      final binding = WidgetsBinding.instance;
+      _lifecycle = binding.lifecycleState;
+      binding.addObserver(_LifecycleWatch(this));
+      _lifecycleWatched = true;
+      AppLogger.i(
+        'TUNNEL',
+        'lifecycle watch installed (now=$_lifecycle)',
+      );
+    } catch (e) {
+      // Tests/plain-Dart host: harmless — the covered-dialog logic simply
+      // never triggers there.
+      _lifecycleWatched = true;
+      AppLogger.w('TUNNEL', 'lifecycle watch unavailable: $e');
+    }
+  }
+
+  void _onAppLifecycle(AppLifecycleState state) {
+    AppLogger.d('TUNNEL', 'app lifecycle $_lifecycle → $state');
+    final wasCovered = _activityCovered;
+    _lifecycle = state;
+    if (state == AppLifecycleState.resumed &&
+        wasCovered &&
+        _connectCompleter != null &&
+        !_connectCompleter!.isCompleted &&
+        !_cancelRequested) {
+      // The app is back in front (video closed / consent answered). Mute the
+      // transient idle chatter the plugin emits around its auto-restart
+      // (noprocess, no_connection) until the engine moves; arm the verdict
+      // that decides "dismissed" if nothing happens within 8s. Note: the
+      // arm's internal cancel must not undo the settle flag set after it.
+      _armConsentVerdict();
+      _settleWindowOpen = true;
+    }
+  }
+
+  bool get _activityCovered =>
+      _lifecycle != null && _lifecycle != AppLifecycleState.resumed;
+
+  /// When the app regains the foreground after a system window (ideally the
+  /// one-time VPN consent), give the plugin's auto-start a short window. If
+  /// the engine is still idle after it — and the app holds the foreground —
+  /// the consent was dismissed/denied: fail fast with a clear message
+  /// instead of eating the whole attempt timeout.
+  void _armConsentVerdict() {
+    _cancelVerdict();
+    final generation = _generation;
+    _consentVerdictTimer = Timer(const Duration(seconds: 8), () async {
+      final completer = _connectCompleter;
+      if (completer == null ||
+          completer.isCompleted ||
+          _cancelRequested ||
+          generation != _generation) {
+        _cancelVerdict();
+        return;
+      }
+      // A new system window may have opened after the arm (e.g. the one-time
+      // consent right after the rewarded video closed). Only judge once the
+      // app holds the foreground again; the wait loop keeps the attempt
+      // alive with its covered-timeout extension in the meantime.
+      if (_activityCovered) {
+        _cancelVerdict();
+        return;
+      }
+      VPNStage stage;
+      try {
+        stage = await _engine.stage().timeout(const Duration(seconds: 4));
+      } catch (_) {
+        _cancelVerdict();
+        return;
+      }
+      if (completer.isCompleted || generation != _generation) {
+        _cancelVerdict();
+        return;
+      }
+      if (_engineIdle(stage) && _settleWindowOpen) {
+        AppLogger.i(
+          'TUNNEL',
+          'consent verdict → engine still idle after resume: permission '
+          'window was dismissed',
+        );
+        _cancelVerdict();
+        _emit(VpnTunnelStatus.disconnected);
+        _stopPolling();
+        _connectCompleter = null;
+        completer.completeError(const VpnException(
+          'permission-denied',
+          'VPN permission was dismissed. Connect again and allow the VPN request.',
+        ));
+        return;
+      }
+      _cancelVerdict();
+    });
+  }
+
+  /// The plugin reports "not even trying to start" through both
+  /// `disconnected` (idle/invalid) and `unknown` (no_connection/noprocess —
+  /// see OpenVPN._strToStage); anything else means the engine is moving.
+  static bool _engineIdle(VPNStage stage) =>
+      stage == VPNStage.disconnected || stage == VPNStage.unknown;
+
+  /// Ends the consent hand-off state: the dismissal check and the settle
+  /// window that mutes the plugin's post-allow restart chatter both close.
+  /// Every path showing the engine/attempt has moved past the consent calls
+  /// this — afterwards a real drop must fail fast again.
+  void _cancelVerdict() {
+    _consentVerdictTimer?.cancel();
+    _consentVerdictTimer = null;
+    _settleWindowOpen = false;
   }
 
   Future<void> _doInitialize() async {
@@ -174,6 +303,16 @@ class OpenVpnTunnel implements VpnTunnel {
             : stage;
     final authRejected = rawLower.contains('auth_fail');
     final isIdleSignal = rawLower.contains('noprocess');
+    // The (re)start handshake also emits vpn_generate_config right around
+    // the idle markers — the core regenerates its local config during the
+    // restart, it is not real server-side progress. It must neither close
+    // the settle window nor cancel the dismissal verdict; treating it as
+    // "movement" let a follow-up no_connection marker kill the attempt
+    // (22:21:33.450 → 22:21:33.546, first connect after consent).
+    final handshakeChatter = !authRejected &&
+        (isIdleSignal ||
+            rawLower.contains('no_connection') ||
+            stage == VPNStage.vpn_generate_config);
     var mapped = _mapStage(effectiveStage);
     if (stage == VPNStage.unknown && authRejected) {
       mapped = VpnTunnelStatus.error;
@@ -198,17 +337,19 @@ class OpenVpnTunnel implements VpnTunnel {
             'This relay rejected the login (it may be full or offline). Try another server.',
           ),
         );
-      } else if (isIdleSignal) {
-        AppLogger.d('TUNNEL', 'ignoring idle noprocess signal');
+      } else if (handshakeChatter) {
+        AppLogger.d('TUNNEL', 'ignoring handshake chatter (raw=$rawStage)');
       } else {
         final displayRaw = rawStage.startsWith('poll:')
             ? rawStage.substring(5)
             : rawStage;
         switch (effectiveStage) {
           case VPNStage.connected:
+            _cancelVerdict();
             c.complete();
             break;
           case VPNStage.denied:
+            _cancelVerdict();
             c.completeError(
               const VpnException(
                 'permission-denied',
@@ -217,6 +358,7 @@ class OpenVpnTunnel implements VpnTunnel {
             );
             break;
           case VPNStage.error:
+            _cancelVerdict();
             c.completeError(
               VpnException(
                 'connect-failed',
@@ -226,6 +368,29 @@ class OpenVpnTunnel implements VpnTunnel {
             break;
           case VPNStage.disconnected:
           case VPNStage.exiting:
+            // A system window (first-use VPN consent!) covering the app makes
+            // the engine report stale idle/disconnected stages. The consent
+            // dialog is exactly where the plugin parks before its auto-start;
+            // failing here is what broke first-use connects. Ignore while
+            // covered; _armConsentVerdict handles the dismissed case.
+            //
+            // Same for the settle window right after a resume: once the user
+            // taps Allow the plugin restarts the tunnel and emits a transient
+            // no_connection idle marker ~0.06s later (at 22:02:52.252 that
+            // marker landed just after the resume, the 2s grace had expired,
+            // and it killed the attempt before the auto-start could go
+            // through). _cancelVerdict must NOT run in either muted branch —
+            // the dismissal verdict stays armed until the engine moves or
+            // 8s elapses.
+            if (!_cancelRequested && (_activityCovered || _settleWindowOpen)) {
+              AppLogger.d(
+                'TUNNEL',
+                'ignoring $stage while covered=$_activityCovered '
+                'settle=$_settleWindowOpen',
+              );
+              break;
+            }
+            _cancelVerdict();
             final sinceStart = _connectStartedAt == null
                 ? Duration.zero
                 : DateTime.now().difference(_connectStartedAt!);
@@ -241,6 +406,10 @@ class OpenVpnTunnel implements VpnTunnel {
             );
             break;
           default:
+            // Engine moving (auth/tcp/assign/…): the settle window and the
+            // dismissal verdict are both pointless now — after this a real
+            // drop must fail fast again.
+            _cancelVerdict();
             break;
         }
       }
@@ -286,22 +455,12 @@ class OpenVpnTunnel implements VpnTunnel {
 
     await _ensureInitialized();
 
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      try {
-        final granted = await _engine.requestPermissionAndroid();
-        AppLogger.i('TUNNEL', 'android VPN permission granted=$granted');
-        if (!granted) {
-          throw const VpnException(
-            'permission-denied',
-            'VPN permission denied. Allow the VPN request and try again.',
-          );
-        }
-      } catch (e) {
-        if (e is VpnException) rethrow;
-        AppLogger.w('TUNNEL', 'permission request threw, continuing anyway: $e');
-      }
-    }
-
+    // The plugin's request_permission method returns false immediately after
+    // showing the system dialog (it doesn't wait for the user's response), so
+    // awaiting it always looks like "denied" on first attempt. The engine's
+    // connect() already handles the permission internally: it saves the config,
+    // launches VpnService.prepare() if needed, and auto-starts the VPN once the
+    // user grants it. We simply call connect() directly.
     final candidates = _remoteVariants(rawConfig);
     AppLogger.i(
       'TUNNEL',
@@ -375,6 +534,8 @@ class OpenVpnTunnel implements VpnTunnel {
     String config,
     Duration timeout,
   ) async {
+    _ensureLifecycleWatched();
+    _cancelVerdict();
     _emit(VpnTunnelStatus.connecting);
     _setStage('Preparing…');
     _connectCompleter = Completer<void>();
@@ -420,37 +581,64 @@ class OpenVpnTunnel implements VpnTunnel {
       'TUNNEL',
       'waiting up to ${timeout.inSeconds}s for connected stage…',
     );
+    // The wait loop tolerates the first-use VPN consent window: while a
+    // system dialog covers the app the attempt timeout is refreshed instead
+    // of expiring (the plugin auto-starts the tunnel the moment the user
+    // taps Allow, via MainActivity → connectWhileGranted). Waits exceeding
+    // 90s of coverage give up as a general timeout.
+    var budget = timeout;
+    var waitedTotal = Duration.zero;
     try {
-      await _connectCompleter!.future.timeout(timeout);
-      if (_cancelRequested) {
-        AppLogger.i('TUNNEL', 'connect cancelled while waiting');
-        throw const VpnException('cancelled', 'Connection cancelled.');
+      while (true) {
+        final chunkStart = DateTime.now();
+        try {
+          await _connectCompleter!.future.timeout(budget);
+          if (_cancelRequested) {
+            AppLogger.i('TUNNEL', 'connect cancelled while waiting');
+            throw const VpnException('cancelled', 'Connection cancelled.');
+          }
+          break;
+        } on TimeoutException catch (e) {
+          waitedTotal += DateTime.now().difference(chunkStart);
+          if (_activityCovered &&
+              !_cancelRequested &&
+              waitedTotal < const Duration(seconds: 90)) {
+            AppLogger.d(
+              'TUNNEL',
+              'attempt timeout with a system dialog still in front — '
+              'extending the wait',
+            );
+            budget = timeout;
+            continue;
+          }
+          String last = _lastRawStage;
+          try {
+            last = (await _engine.stage().timeout(const Duration(seconds: 3)))
+                .name;
+          } catch (_) {}
+          AppLogger.e(
+            'TUNNEL',
+            'connect timed out after $timeout (last stage=$last)',
+            e,
+          );
+          _teardown();
+          _emit(VpnTunnelStatus.error);
+          throw VpnException(
+            'timeout',
+            'Stuck at "$last" — this relay is too slow. Try another server.',
+            e,
+          );
+        }
       }
-    } on TimeoutException catch (e) {
-      String last = _lastRawStage;
-      try {
-        last = (await _engine.stage().timeout(const Duration(seconds: 3)))
-            .name;
-      } catch (_) {}
-      AppLogger.e(
-        'TUNNEL',
-        'connect timed out after $timeout (last stage=$last)',
-        e,
-      );
-      _teardown();
-      _emit(VpnTunnelStatus.error);
-      throw VpnException(
-        'timeout',
-        'Stuck at "$last" — this relay is too slow. Try another server.',
-        e,
-      );
     } finally {
+      _cancelVerdict();
       _stopPolling();
       _connectCompleter = null;
     }
   }
 
   void _teardown() {
+    _cancelVerdict();
     _stopPolling();
     try {
       _engine.disconnect();
@@ -555,6 +743,7 @@ class OpenVpnTunnel implements VpnTunnel {
   @override
   Future<void> disconnect() async {
     AppLogger.i('TUNNEL', 'real disconnect (was $_status, last=$_lastRawStage)');
+    _cancelVerdict();
     _stopPolling();
     _cancelRequested = true;
     _generation++;
@@ -634,4 +823,17 @@ class OpenVpnTunnel implements VpnTunnel {
     _status = status;
     if (!_controller.isClosed) _controller.add(status);
   }
+}
+
+/// Forwards app lifecycle transitions into the tunnel so the consent-aware
+/// wait can tell "system dialog in front" (lifecycle leaves `resumed`) from
+/// real failures.
+class _LifecycleWatch extends WidgetsBindingObserver {
+  _LifecycleWatch(this.tunnel);
+
+  final OpenVpnTunnel tunnel;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      tunnel._onAppLifecycle(state);
 }

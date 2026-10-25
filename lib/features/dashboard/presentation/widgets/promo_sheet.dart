@@ -13,13 +13,16 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 class PromoSheet extends StatelessWidget {
   const PromoSheet({super.key});
 
-  VpnServer _selected(List<VpnServer> servers, String id) {
+  /// Owner decision #10: nothing is selected until the user picks. With no
+  /// selection this returns null — the tile then advertises "no server
+  /// selected" instead of faking a pick from the top of the list (the old
+  /// first-server fallback is what made a default look pre-selected).
+  VpnServer? _selected(List<VpnServer> servers, String id) {
+    if (id.isEmpty) return null;
     for (final s in servers) {
       if (s.matchesId(id)) return s;
     }
-    return servers.isNotEmpty
-        ? servers.first
-        : const VpnServer(name: 'United States', flag: '🇺🇸');
+    return null;
   }
 
   @override
@@ -48,12 +51,20 @@ class PromoSheet extends StatelessWidget {
                 final selected = _selected(state.servers, state.server);
                 return _PromoOption(
                   icon: Icons.dns_rounded,
-                  iconColor: AppColors.primary,
-                  iconBackground: AppColors.primaryContainer,
-                  title: '${selected.flag} ${selected.name}',
-                  subtitle: selected.isVpnGate
-                      ? '${selected.hostName} • ${selected.speedText} — tap to change'
-                      : 'Tap to choose a server',
+                  iconColor: selected == null
+                      ? AppColors.textSecondary
+                      : AppColors.primary,
+                  iconBackground: selected == null
+                      ? AppColors.surfaceVariant
+                      : AppColors.primaryContainer,
+                  title: selected == null
+                      ? 'No server selected'
+                      : '${selected.flag} ${selected.name}',
+                  subtitle: selected == null
+                      ? 'Tap to choose a server'
+                      : selected.isVpnGate
+                          ? '${selected.hostName} • ${selected.speedText} — tap to change'
+                          : 'Tap to choose a server',
                   onTap: () => context.push(AppPages.servers),
                 );
               },

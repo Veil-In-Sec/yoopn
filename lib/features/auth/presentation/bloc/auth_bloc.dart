@@ -403,7 +403,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           state.copyWith(
             status: AuthStatus.failure,
             loadingAction: AuthLoadingAction.none,
-            errorMsg: 'Failed to open browser for Google authentication.',
+            errorMsg: 'Google sign-in could not be started. Please try again.',
           ),
         );
       }

@@ -5,6 +5,53 @@ import 'package:yoopn/core/ads/ad_config.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 
+/// Renders one banner slot: either a loaded ad or the reserved-height
+/// placeholder. Banner ads are platform-fixed 320x50 **dp** — NOT
+/// ScreenUtil-scaled — so the placeholder and the carousel box use the
+/// same raw logical height to keep placeholder, loaded ad and page box
+/// pixel-identical (mixing `.h` here caused layout jumps / clipping).
+class BannerAdView extends StatelessWidget {
+  const BannerAdView({super.key, this.ad, this.failed = false});
+
+  final BannerAd? ad;
+  final bool failed;
+
+  /// Platform-fixed logical height of [AdSize.banner] (320x50 dp).
+  static double get height => AdSize.banner.height.toDouble();
+
+  @override
+  Widget build(BuildContext context) {
+    final ad = this.ad;
+    if (ad != null) {
+      return SizedBox(
+        width: AdSize.banner.width.toDouble(),
+        height: BannerAdView.height,
+        child: AdWidget(ad: ad),
+      );
+    }
+    return Container(
+      width: double.infinity,
+      height: BannerAdView.height,
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Center(
+        child: Text(
+          failed ? 'Ad unavailable' : 'Loading ad…',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 10.sp, color: AppColors.textHint),
+        ),
+      ),
+    );
+  }
+}
+
+/// Standalone self-loading banner slot for one-off placements. The carousel
+/// (ad_carousel_widget.dart) owns its ads instead so page flips never
+/// re-issue load requests.
 class BannerAdWidget extends StatefulWidget {
   const BannerAdWidget({super.key});
 
@@ -55,29 +102,6 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
   @override
   Widget build(BuildContext context) {
-    const height = 50.0;
-    final ad = _ad;
-    if (ad != null) {
-      return SizedBox(
-        width: AdSize.banner.width.toDouble(),
-        height: height,
-        child: AdWidget(ad: ad),
-      );
-    }
-    return Container(
-      width: double.infinity,
-      height: height.h,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Center(
-        child: Text(
-          _failed ? 'Ad unavailable' : 'Loading ad…',
-          style: TextStyle(fontSize: 10.sp, color: AppColors.textHint),
-        ),
-      ),
-    );
+    return BannerAdView(ad: _ad, failed: _failed);
   }
 }

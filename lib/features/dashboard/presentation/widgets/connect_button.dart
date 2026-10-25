@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:yoopn/core/widgets/app_snackbar.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:yoopn/core/dimentions/spacings.dart';
 import 'package:yoopn/core/ads/ad_gate.dart';
+import 'package:yoopn/core/routes/app_pages.dart';
 import 'package:yoopn/core/themes/app_colors.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_bloc.dart';
@@ -12,8 +14,8 @@ import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/vpn_status.dart';
 
-/// Serializes taps while the 30s ad gate is open: without this, rapid taps
-/// enqueue two toggles (connect, then instant disconnect).
+/// Serializes taps while the ad gate (rewarded video) is running: without
+/// this, rapid taps enqueue two toggles (connect, then instant disconnect).
 bool _gateBusy = false;
 
 class ConnectButton extends StatelessWidget {
@@ -57,14 +59,18 @@ class ConnectButton extends StatelessWidget {
                 _gateBusy = true;
                 try {
                   final expect = bloc.state.status;
-                  final turningOn = expect == VpnStatus.disconnected;
-                  await showAdGate(
-                    context,
-                    title: turningOn ? 'Connecting VPN…' : 'Disconnecting…',
-                  );
+                  // Owner decision #10: nothing is auto-selected — connect
+                  // needs an explicit pick. Route to the servers screen
+                  // instead of spending a rewarded ad on a blocked toggle.
+                  if (bloc.state.server.isEmpty) {
+                    AppLogger.i('UI', 'Connect tapped with no server → /servers');
+                    if (context.mounted) context.push(AppPages.servers);
+                    return;
+                  }
+                  await startAdGate();
                   if (!context.mounted || bloc.isClosed) return;
                   // Skip if something else (sign-out, tunnel sync) already
-                  // moved the state during the 30s gate.
+                  // moved the state while the ad was on screen.
                   if (bloc.state.status != expect) return;
                   bloc.add(const VpnToggled());
                 } finally {
@@ -100,29 +106,40 @@ class ConnectButton extends StatelessWidget {
                 child: Stack(
                   children: [
                     Positioned.fill(
+                      // Expanded labels share the fixed rail width, so the
+                      // OFF/ON texts ellipsize instead of overflowing at
+                      // large text scale.
                       child: Row(
                         children: [
                           Spacing.horizontal(12),
-                          Text(
-                            'OFF',
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w800,
-                              color: connected
-                                  ? AppColors.onPrimary
-                                      .withValues(alpha: 0.65)
-                                  : AppColors.primary,
+                          Expanded(
+                            child: Text(
+                              'OFF',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w800,
+                                color: connected
+                                    ? AppColors.onPrimary
+                                        .withValues(alpha: 0.65)
+                                    : AppColors.primary,
+                              ),
                             ),
                           ),
-                          const Spacer(),
-                          Text(
-                            'ON',
-                            style: TextStyle(
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w800,
-                              color: connected
-                                  ? AppColors.onPrimary
-                                  : AppColors.textHint,
+                          Expanded(
+                            child: Text(
+                              'ON',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w800,
+                                color: connected
+                                    ? AppColors.onPrimary
+                                    : AppColors.textHint,
+                              ),
                             ),
                           ),
                           Spacing.horizontal(12),

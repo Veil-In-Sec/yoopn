@@ -16,28 +16,30 @@ class HomeScreen extends StatelessWidget {
     AppLogger.d('UI', 'HomeScreen build');
     return SafeArea(
       bottom: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 32.h),
-        child: CustomScrollView(
-          slivers: [
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Column(
-                children: [
-                  const HomeHeader(),
-                  Spacing.vertical(12),
-                  const Center(child: AdCarouselWidget()),
-                  Spacing.vertical(12),
-                  const _FreeTitle(),
-                  Spacing.vertical(20),
-                  const ConnectButton(),
-                  Spacing.vertical(12),
-                  const StatusPanel(),
-                  const Spacer(),
-                ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 32.h),
+                child: Column(
+                  children: [
+                    const HomeHeader(),
+                    Spacing.vertical(12),
+                    const Center(child: AdCarouselWidget()),
+                    Spacing.vertical(12),
+                    const _FreeTitle(),
+                    Spacing.vertical(20),
+                    const ConnectButton(),
+                    Spacing.vertical(12),
+                    const StatusPanel(),
+                    const Spacer(),
+                  ],
+                ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

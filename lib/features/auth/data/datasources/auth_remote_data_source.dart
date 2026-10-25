@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:yoopn/core/config/google_config.dart';
 import 'package:yoopn/core/config/supabase_config.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import '../models/auth_credentials_model.dart';
@@ -71,19 +73,85 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   @override
   Future<bool> signInWithGoogle() async {
-    AppLogger.i('AUTH', 'remote.signInWithGoogle redirect=${kIsWeb ? 'web' : SupabaseConfig.redirectUrl}');
+    AppLogger.i(
+      'AUTH',
+      'remote.signInWithGoogle mode=${GoogleConfig.nativeConfigured ? 'native-primary + browser fallback' : 'system-browser OAuth'}',
+    );
+
+    // 1) NATIVE one-tap (Credential Manager bottom sheet listing the device's
+    //    Google accounts — no browser, no deep link). Attempted only when the
+    //    owner-configured GOOGLE_WEB_CLIENT_ID is present; Android-only; on
+    //    any failure we degrade gracefully to the browser flow below so the
+    //    sign-in never dead-ends.
+    if (GoogleConfig.nativeConfigured) {
+      try {
+        final ok = await _signInWithGoogleNative();
+        return ok;
+      } on GoogleSignInException catch (e, st) {
+        if (e.code == GoogleSignInExceptionCode.canceled) {
+          // User backed out of the account sheet — do NOT then shove them
+          // into a browser flow they didn't ask for.
+          AppLogger.e('AUTH', 'remote.signInWithGoogle native canceled by user', e, st);
+          rethrow;
+        }
+        AppLogger.w('AUTH', 'remote.signInWithGoogle native failed (${e.code.name}) — falling back to browser flow');
+      } catch (e, st) {
+        AppLogger.e('AUTH', 'remote.signInWithGoogle native unexpected — falling back to browser flow', e, st);
+      }
+    }
+
+    // 2) FALLBACK — system-browser OAuth (works with zero Google Cloud
+    //    client-side config): after Google consent, Supabase redirects to
+    //    the custom scheme `io.supabase.yoopn://login-callback`, which only
+    //    resolves back to the app when the OS dispatches it — in-app browser
+    //    tabs swallow custom-scheme navigations, so the callback never
+    //    arrives. supabase_flutter completes the PKCE exchange automatically
+    //    from the deep link (SupabaseAuth + app_links).
     try {
       final ok = await _supabaseClient.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: kIsWeb ? null : SupabaseConfig.redirectUrl,
         authScreenLaunchMode: LaunchMode.externalApplication,
       );
-      AppLogger.i('AUTH', 'remote.signInWithGoogle launched=$ok');
+      AppLogger.i('AUTH', 'remote.signInWithGoogle launched=$ok (system browser)');
       return ok;
     } catch (e, st) {
       AppLogger.e('AUTH', 'remote.signInWithGoogle failed', e, st);
       rethrow;
     }
+  }
+
+  /// Native Credential Manager one-tap (google_sign_in 7.x).
+  ///
+  /// Official Supabase pattern: the WEB client ID is passed as
+  /// `serverClientId`; Google mints an ID token directly into the app (no
+  /// browser, no deep link) and Supabase validates it with
+  /// `signInWithIdToken`, returning a real session synchronously (the
+  /// browser path instead waits for the deep-link callback).
+  Future<bool> _signInWithGoogleNative() async {
+    final googleSignIn = GoogleSignIn.instance;
+    await googleSignIn.initialize(serverClientId: GoogleConfig.webClientId);
+
+    final googleUser = await googleSignIn.authenticate();
+
+    const scopes = ['email', 'profile'];
+    final authorization =
+        await googleUser.authorizationClient.authorizationForScopes(scopes) ??
+        await googleUser.authorizationClient.authorizeScopes(scopes);
+
+    final idToken = googleUser.authentication.idToken;
+    AppLogger.i('AUTH', 'remote.signInWithGoogle native idToken=${idToken != null}');
+    if (idToken == null) {
+      throw AuthException('No ID Token found.');
+    }
+
+    final response = await _supabaseClient.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: authorization.accessToken,
+    );
+    AppLogger.i('AUTH', 'remote.signInWithGoogle native ok session=${response.session != null}');
+    return response.session != null;
   }
 
   @override

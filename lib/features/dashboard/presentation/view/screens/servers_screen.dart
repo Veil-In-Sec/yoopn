@@ -26,14 +26,16 @@ class ServersScreen extends StatefulWidget {
 class _ServersScreenState extends State<ServersScreen> {
   final _searchController = TextEditingController();
   String _query = '';
+  Timer? _debounce;
 
-  /// Serializes taps while a selection (possibly through the 30s ad gate)
+  /// Serializes taps while a selection (possibly through the ad gate)
   /// is in flight: without this, rapid taps on A then B interleave counter
   /// reads and the second selection bypasses the gate.
   bool _busy = false;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -99,11 +101,28 @@ class _ServersScreenState extends State<ServersScreen> {
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 contentPadding: EdgeInsets.symmetric(vertical: 10.h),
               ),
-              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              onChanged: (v) {
+                // Debounced: the row-by-row text scan runs once the user
+                // pauses, not on every keystroke.
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 250), () {
+                  if (!mounted) return;
+                  setState(() => _query = v.trim().toLowerCase());
+                });
+              },
             ),
           ),
           Expanded(
             child: BlocBuilder<VpnBloc, VpnState>(
+              // Tunnel detail strings stream in during a connect (several
+              // per second); without buildWhen every one re-ran `_filtered`
+              // and rebuilt the whole list.
+              buildWhen: (prev, curr) =>
+                  prev.servers != curr.servers ||
+                  prev.server != curr.server ||
+                  prev.isLoadingServers != curr.isLoadingServers ||
+                  prev.serversStatus != curr.serversStatus ||
+                  prev.serversError != curr.serversError,
               builder: (_, state) {
                 if (state.isLoadingServers && state.servers.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
@@ -157,6 +176,7 @@ class _ServersScreenState extends State<ServersScreen> {
                       final selected = server.matchesId(state.server);
                       return Card(
                         color: AppColors.surface,
+                        margin: EdgeInsets.symmetric(vertical: 10.h),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16.r),
                           side: BorderSide(
@@ -229,11 +249,11 @@ class _ServersScreenState extends State<ServersScreen> {
       final store = context.read<AdCounterStore>();
       if (await ServerChangeGate.requiresAd(store)) {
         if (!context.mounted) return;
-        await showAdGate(context, title: 'Changing server…');
+        await startAdGate();
         if (!context.mounted || bloc.isClosed) return;
-        // Re-validate: the tunnel may have connected during the 30s gate,
-        // in which case selection is (correctly) a no-op in the bloc — but
-        // don't pop the page out from under a connecting tunnel either.
+        // Re-validate: the tunnel may have connected while the ad was on
+        // screen, in which case selection is (correctly) a no-op in the
+        // bloc — but don't pop the page out from under a connecting tunnel.
         if (bloc.state.status != VpnStatus.disconnected) return;
       }
       if (bloc.isClosed) return;

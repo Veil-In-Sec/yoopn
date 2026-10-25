@@ -6,7 +6,6 @@ import 'package:yoopn/core/telemetry/supabase_telemetry.dart';
 import 'package:yoopn/core/utils/app_logger.dart';
 import 'package:yoopn/features/dashboard/domain/entities/vpn_server.dart';
 import 'package:yoopn/features/dashboard/domain/usecases/dashboard_use_cases.dart';
-import 'package:yoopn/features/dashboard/domain/utils/server_ranking.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_event.dart';
 import 'package:yoopn/features/dashboard/presentation/bloc/vpn_state.dart';
 import 'package:yoopn/features/dashboard/presentation/helper/vpn_status.dart';
@@ -33,8 +32,6 @@ class VpnBloc extends Bloc<VpnEvent, VpnState> {
   StreamSubscription<String>? _detailSub;
 
   bool _connectInFlight = false;
-
-  bool _userPickedServer = false;
 
   static const _refreshBudget = Duration(seconds: 2);
 
@@ -155,6 +152,21 @@ class VpnBloc extends Bloc<VpnEvent, VpnState> {
       }
       return;
     }
+    if (state.server.isEmpty) {
+      // Owner decision #10: nothing is auto-selected — connecting requires
+      // an explicit server pick. The connect button routes to the servers
+      // screen before reaching here; this is the guard for other callers.
+      AppLogger.w('VPN', 'connect blocked — no server selected yet');
+      if (!isClosed) {
+        emit(
+          state.copyWith(
+            errorMessage:
+                'Select a server first. Open Location, pick a relay showing host/IP, then connect.',
+          ),
+        );
+      }
+      return;
+    }
     _connectInFlight = true;
     final startedAt = DateTime.now();
     AppLogger.i('VPN', 'connecting to ${state.server}…');
@@ -227,12 +239,6 @@ class VpnBloc extends Bloc<VpnEvent, VpnState> {
     }
   }
 
-  static VpnServer? _bestUsableRelay(List<VpnServer> servers) {
-    final usable = servers.where((s) => s.isVpnGate).toList()
-      ..sort(compareServersByQuality);
-    return usable.isEmpty ? null : usable.first;
-  }
-
   void _onServerSelected(VpnServerSelected event, Emitter<VpnState> emit) {
     AppLogger.i('VPN', 'server selected ${event.server} (status=${state.status})');
     if (state.status != VpnStatus.disconnected) {
@@ -241,7 +247,6 @@ class VpnBloc extends Bloc<VpnEvent, VpnState> {
     }
     final server = useCases.selectVpnServer(event.server);
     if (server != null) {
-      _userPickedServer = true;
       AppLogger.d('VPN', 'manual selection → ${server.id}');
       emit(state.copyWith(server: server.id));
     }
@@ -336,55 +341,35 @@ class VpnBloc extends Bloc<VpnEvent, VpnState> {
     }
     if (isClosed) return;
     AppLogger.i('VPN', 'servers loaded: ${servers.length} (keep=${state.server})');
-    await _emitLoadedServers(emit, servers);
+    _emitLoadedServers(emit, servers);
   }
 
-  Future<void> _emitLoadedServers(
+  void _emitLoadedServers(
     Emitter<VpnState> emit,
     List<VpnServer> servers,
-  ) async {
-    // Never move the selection while a tunnel is up or handshaking: the
-    // list may refresh, but connect() shook hands with (and telemetry
-    // logged) the server selected at tap time.
-    final pinned = state.status != VpnStatus.disconnected;
+  ) {
+    // Owner decision #10: no server is ever selected on the app's behalf.
+    // The user's explicit pick survives refreshes; when the picked relay
+    // has vanished from the fresh list the selection CLEARS (no silent
+    // re-pick), so the next connect forces a fresh, deliberate choice.
     var selectedId = state.server;
-    if (!_userPickedServer) {
-      final best = _bestUsableRelay(servers);
-      if (best != null) {
-        selectedId = best.id;
-        AppLogger.i('VPN', 'auto-selected default relay ${best.id} '
-            '(score=${best.score} ping=${best.ping})');
-      } else {
-        AppLogger.w('VPN', 'no connectable relay in ${servers.length} entries');
-      }
-    } else {
-      final stillAvailable = servers.any((s) => s.matchesId(selectedId));
-      if (!stillAvailable && servers.isNotEmpty) {
-        final previous = useCases.selectVpnServer(selectedId);
-        VpnServer? sameCountry;
-        if (previous != null) {
-          for (final s in servers) {
-            if (s.name == previous.name) {
-              sameCountry = s;
-              break;
-            }
-          }
-        }
-        selectedId =
-            sameCountry?.id ?? (await useCases.getBestServer())?.id ??
-            servers.first.id;
-      }
-    }
-    if (selectedId.isEmpty) {
-      final best = _bestUsableRelay(servers);
-      if (best != null) selectedId = best.id;
+    if (selectedId.isNotEmpty &&
+        !servers.any((s) => s.matchesId(selectedId))) {
+      AppLogger.w(
+        'VPN',
+        'picked relay vanished ($selectedId) — clearing selection',
+      );
+      selectedId = '';
     }
     if (isClosed) return;
     emit(
       state.copyWith(
         servers: servers,
         serversStatus: VpnServersStatus.loaded,
-        server: pinned ? state.server : selectedId,
+        // Never move the selection while a tunnel is up or handshaking:
+        // connect() shook hands with the server chosen at tap time.
+        server:
+            state.status == VpnStatus.disconnected ? selectedId : state.server,
       ),
     );
   }
@@ -398,7 +383,7 @@ class VpnBloc extends Bloc<VpnEvent, VpnState> {
       'VPN',
       'background refresh landed (${event.servers.length} servers)',
     );
-    await _emitLoadedServers(emit, event.servers);
+    _emitLoadedServers(emit, event.servers);
   }
 
   void _onBackgroundFailed(

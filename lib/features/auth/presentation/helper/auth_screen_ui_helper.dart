@@ -30,9 +30,12 @@ const List<AuthPageData> pages = [
   ),
 ];
 
-void startAutoPlay(Timer? timer, Duration autoPlayInterval, PageController pageController, ValueNotifier<int> currentPage) {
-  timer?.cancel();
-  timer = Timer.periodic(autoPlayInterval, (_) {
+/// Drives the auth carousel. Returns the new Timer — Dart passes Timer by
+/// value, so handing one in can never reassign the caller's field (the old
+/// signature leaked a periodic timer on every auth screen visit because
+/// `dispose()` was cancelling a field that stayed null).
+Timer startAutoPlay(Duration autoPlayInterval, PageController pageController, ValueNotifier<int> currentPage) {
+  return Timer.periodic(autoPlayInterval, (_) {
     if (!pageController.hasClients) return;
     final next = (currentPage.value + 1) % pages.length;
     pageController.animateToPage(
@@ -105,5 +108,5 @@ void showOtpDialog(BuildContext context, String email) {
         ],
       );
     },
-  );
+  ).whenComplete(otpController.dispose);
 }

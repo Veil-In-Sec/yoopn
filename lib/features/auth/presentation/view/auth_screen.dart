@@ -33,7 +33,7 @@ class _AuthScreenState extends State<AuthScreen> {
   void initState() {
     super.initState();
     AppLogger.d('UI', 'AuthScreen initState');
-    startAutoPlay(_timer, _autoPlayInterval, _pageController, _currentPage);
+    _timer = startAutoPlay(_autoPlayInterval, _pageController, _currentPage);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -161,6 +161,11 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   Spacing.vertical(15),
                   BlocBuilder<AuthBloc, AuthState>(
+                    // State carries the per-keystroke `email` field; only
+                    // the loading/postal parts matter for this button.
+                    buildWhen: (prev, curr) =>
+                        prev.status != curr.status ||
+                        prev.loadingAction != curr.loadingAction,
                     builder: (context, state) {
                       final isAnyLoading = state.status == AuthStatus.loading;
                       final isEmailLoading = isAnyLoading &&
@@ -201,6 +206,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   Spacing.vertical(15),
                   BlocBuilder<AuthBloc, AuthState>(
+                    buildWhen: (prev, curr) =>
+                        prev.status != curr.status ||
+                        prev.loadingAction != curr.loadingAction,
                     builder: (context, state) {
                       final isAnyLoading = state.status == AuthStatus.loading;
                       final isGoogleLoading = isAnyLoading &&

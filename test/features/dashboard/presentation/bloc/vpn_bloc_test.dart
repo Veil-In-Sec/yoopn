@@ -91,28 +91,35 @@ class _FakeVpnRepository implements VpnRepository {
   Future<void> dispose() => _details.close();
 }
 
-class _MixedRepository implements VpnRepository {
-  static const stub = VpnServer(
-    name: 'United States',
-    flag: '🇺🇸',
-    score: 20000,
-    ping: 5,
-  );
-  static const usable = VpnServer(
-    name: 'Japan',
-    flag: '🇯🇵',
-    hostName: 'usable-1',
-    ip: '9.9.9.9',
-    score: 5000,
-    ping: 30,
-    openVpnConfig: 'Y2xpZW50CmRldiB0dW4K',
-  );
-
+class _ShrinkingRepository implements VpnRepository {
+  List<VpnServer> relays;
   final _details = StreamController<String>.broadcast();
+
+  _ShrinkingRepository({required this.relays});
+
+  @override
+  Future<void> connect(VpnServer server) async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  VpnServer? findServer(String name) {
+    for (final s in relays) {
+      if (s.matchesId(name)) return s;
+    }
+    return null;
+  }
 
   @override
   Future<List<VpnServer>> getServers({bool forceRefresh = false}) async =>
-      const [stub, usable];
+      relays;
+
+  @override
+  Future<VpnServer?> getBestServer() async => null;
+
+  @override
+  Future<List<VpnServer>> searchServers(String query) async => relays;
 
   @override
   Stream<String> get connectionDetailStream => _details.stream;
@@ -124,26 +131,6 @@ class _MixedRepository implements VpnRepository {
   Future<bool> syncTunnelState() async => false;
 
   Future<void> dispose() => _details.close();
-
-  @override
-  Future<void> connect(VpnServer server) async {}
-
-  @override
-  Future<void> disconnect() async {}
-
-  @override
-  VpnServer? findServer(String name) {
-    for (final s in [stub, usable]) {
-      if (s.matchesId(name)) return s;
-    }
-    return null;
-  }
-
-  @override
-  Future<VpnServer?> getBestServer() async => stub;
-
-  @override
-  Future<List<VpnServer>> searchServers(String query) async => const [stub, usable];
 }
 
 void main() {
@@ -169,6 +156,9 @@ void main() {
       bloc.add(const VpnServersRequested());
       await bloc.stream.firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
+
       bloc.add(const VpnToggled());
       final connected =
           await bloc.stream.firstWhere((s) => s.status == VpnStatus.connected);
@@ -182,6 +172,9 @@ void main() {
       bloc.add(const VpnServersRequested());
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
+
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
 
       repository.connectError =
           const VpnException('timeout', 'Stuck at "assign_ip"');
@@ -215,6 +208,9 @@ void main() {
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
+
       repository.connectDelay = const Duration(milliseconds: 80);
       bloc.add(const VpnToggled());
       await bloc.stream
@@ -235,6 +231,9 @@ void main() {
       bloc.add(const VpnServersRequested());
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
+
       bloc.add(const VpnToggled());
       await bloc.stream.firstWhere((s) => s.status == VpnStatus.connected);
 
@@ -243,6 +242,7 @@ void main() {
 
       expect(bloc.state.status, VpnStatus.connected);
       expect(bloc.state.server, isNot('unknown-server'));
+      expect(bloc.state.server, 'public-vpn-1');
     });
 
     test('selecting an unknown server leaves the selection unchanged',
@@ -266,6 +266,9 @@ void main() {
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
+
       repository.connectDelay = const Duration(milliseconds: 60);
       bloc.add(const VpnToggled());
       await bloc.stream
@@ -283,6 +286,8 @@ void main() {
       bloc.add(const VpnServersRequested());
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
       bloc.add(const VpnToggled());
       await bloc.stream.firstWhere((s) => s.status == VpnStatus.connected);
 
@@ -296,34 +301,57 @@ void main() {
     });
   });
 
-  group('default server selection', () {
-    test('auto-selects the best live relay on first load', () async {
+  group('no default selection', () {
+    test('keeps the selection empty on first load (no default)', () async {
       bloc.add(const VpnServersRequested());
       final loaded = await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
-      expect(loaded.server, 'public-vpn-1');
-      final selected = loaded.servers.firstWhere(
-        (s) => s.matchesId(loaded.server),
-      );
-      expect(selected.isVpnGate, isTrue);
-      expect(selected.openVpnConfig, isNotEmpty);
+      expect(loaded.server, isEmpty);
+      expect(loaded.servers, isNotEmpty);
     });
 
-    test('skips relays without a config when choosing the default',
-        () async {
-      final repo = _MixedRepository();
-      final mixedBloc = VpnBloc(
-        useCases: DashboardUseCases.fromRepository(repo),
-      );
-      addTearDown(mixedBloc.close);
-      addTearDown(repo.dispose);
-
-      mixedBloc.add(const VpnServersRequested());
-      final loaded = await mixedBloc.stream
+    test('connect requires an explicit selection', () async {
+      bloc.add(const VpnServersRequested());
+      await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
-      expect(loaded.server, 'usable-1');
+      bloc.add(const VpnToggled());
+      final failed =
+          await bloc.stream.firstWhere((s) => s.errorMessage != null);
+
+      expect(repository.connectCalls, 0);
+      expect(failed.status, VpnStatus.disconnected);
+      expect(failed.errorMessage, contains('Select a server'));
+    });
+
+    test('a picked relay that vanished clears the selection',
+        () async {
+      final repo = _ShrinkingRepository(relays: const [_relay]);
+      final shrinkingBloc =
+          VpnBloc(useCases: DashboardUseCases.fromRepository(repo));
+      addTearDown(shrinkingBloc.close);
+      addTearDown(repo.dispose);
+
+      shrinkingBloc.add(const VpnServersRequested());
+      await shrinkingBloc.stream
+          .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
+      expect(shrinkingBloc.state.server, isEmpty);
+      shrinkingBloc.add(const VpnServerSelected('public-vpn-1'));
+      await shrinkingBloc.stream
+          .firstWhere((s) => s.server == 'public-vpn-1');
+
+      // Refresh hands back a list without the picked relay: the selection
+      // must clear instead of silently re-picking something else.
+      repo.relays = const [_relay2];
+      shrinkingBloc.add(const VpnServersRequested(forceRefresh: true));
+      final after = await shrinkingBloc.stream.firstWhere(
+        (s) =>
+            s.serversStatus == VpnServersStatus.loaded &&
+            s.server != 'public-vpn-1',
+      );
+
+      expect(after.server, isEmpty);
     });
 
     test('keeps a manual selection across refreshes', () async {
@@ -349,6 +377,9 @@ void main() {
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
+
       bloc.add(const VpnToggled());
       await bloc.stream.firstWhere((s) => s.status == VpnStatus.connected);
       expect(repository.connectCalls, 1);
@@ -366,6 +397,9 @@ void main() {
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
+
       repository.connectError = const VpnException('timeout', 'too slow');
       bloc.add(const VpnToggled());
       await bloc.stream.firstWhere((s) => s.errorMessage != null);
@@ -382,6 +416,9 @@ void main() {
       bloc.add(const VpnServersRequested());
       await bloc.stream
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
+
+      bloc.add(const VpnServerSelected('public-vpn-1'));
+      await bloc.stream.firstWhere((s) => s.server == 'public-vpn-1');
 
       repository.connectDelay = const Duration(milliseconds: 60);
       bloc.add(const VpnToggled());
@@ -408,7 +445,7 @@ void main() {
           .firstWhere((s) => s.serversStatus == VpnServersStatus.loaded);
 
       expect(loaded.servers.length, 2);
-      expect(loaded.server, 'public-vpn-1');
+      expect(loaded.server, isEmpty);
     });
 
     test('forceRefresh is forwarded to the repository', () async {

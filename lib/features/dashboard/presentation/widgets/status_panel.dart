@@ -61,34 +61,41 @@ class StatusPanel extends StatelessWidget {
             Spacing.vertical(10),
             SizedBox(
               height: 34.h * 2,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (connected && since != null)
-                    _ConnectedTimerTitle(since: since)
-                  else
+              // Reserved height stays stable between states, while
+              // FittedBox(scaleDown) guarantees the title/subtitle never
+              // overflow it on small screens or at large text scale.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (connected && since != null)
+                      _ConnectedTimerTitle(since: since)
+                    else
+                      Text(
+                        status.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 26.sp,
+                          height: 1.15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    Spacing.vertical(4),
                     Text(
-                      status.title,
+                      supporting,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 26.sp,
-                        height: 1.15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
+                        fontSize: 13.sp,
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                  Spacing.vertical(4),
-                  Text(
-                    supporting,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.sp,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             if (connecting) ...[

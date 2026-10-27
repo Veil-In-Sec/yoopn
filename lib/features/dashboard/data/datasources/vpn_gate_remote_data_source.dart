@@ -136,7 +136,7 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
     return _serverCache!;
   }
 
-  static const _attempts = 5;
+  static const _attempts = 2;
 
   Future<String> _fetchRawCsv() async {
     Object? lastError;
@@ -146,9 +146,9 @@ class VpnGateRemoteDataSourceImpl implements VpnGateRemoteDataSource {
         final response = await _dio.get<String>(
           endpoint,
           options: Options(
-            connectTimeout: const Duration(seconds: 30),
-            receiveTimeout: const Duration(seconds: 60),
-            sendTimeout: const Duration(seconds: 30),
+            connectTimeout: const Duration(seconds: 5),
+            receiveTimeout: const Duration(seconds: 10),
+            sendTimeout: const Duration(seconds: 5),
           ),
         );
         final body = response.data ?? '';
